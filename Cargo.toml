@@ -1,0 +1,19 @@
+
+[workspace]
+members = [
+  "crates/p2p-raft",
+  "test-crates/memstore",
+  "test-crates/raft-kv-memstore-network-v2",
+]
+
+resolver = "3"
+
+[workspace.dependencies]
+derive_more = { version = "1", features = ["full"] }
+maplit = "*"
+
+openraft = { git = "https://github.com/maackle/openraft.git", features = [
+  "type-alias",
+] }
+openraft-macros = { git = "https://github.com/maackle/openraft.git" }
+openraft-memstore = { git = "https://github.com/maackle/openraft.git" }

@@ -1,0 +1,9 @@
+[package]
+name = "p2p-raft"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+openraft = { workspace = true }
+openraft-macros = { workspace = true }
+openraft-memstore = { workspace = true }
