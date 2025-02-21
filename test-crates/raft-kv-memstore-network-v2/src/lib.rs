@@ -2,8 +2,10 @@
 #![deny(unused_qualifications)]
 
 use std::sync::Arc;
+use std::sync::Mutex;
 
 use openraft::Config;
+use router::RouterNode;
 
 use crate::app::App;
 use crate::router::Router;
@@ -44,7 +46,7 @@ pub fn decode<T: serde::de::DeserializeOwned>(s: &str) -> T {
     serde_json::from_str(s).unwrap()
 }
 
-pub async fn new_raft(node_id: NodeId, router: Router) -> (typ::Raft, App) {
+pub async fn new_raft(node_id: NodeId, router: Arc<Mutex<Router>>) -> (typ::Raft, App) {
     // Create a configuration for the raft instance.
     let config = Config {
         heartbeat_interval: 500,
@@ -64,18 +66,23 @@ pub async fn new_raft(node_id: NodeId, router: Router) -> (typ::Raft, App) {
     // Create a instance of where the state machine data will be stored.
     let state_machine_store = Arc::new(StateMachineStore::default());
 
+    let node = RouterNode {
+        source: node_id,
+        router,
+    };
+
     // Create a local raft instance.
     let raft = openraft::Raft::new(
         node_id,
         config,
-        router.clone(),
+        node.clone(),
         log_store,
         state_machine_store.clone(),
     )
     .await
     .unwrap();
 
-    let app = App::new(node_id, raft.clone(), router, state_machine_store);
+    let app = App::new(raft.clone(), node, state_machine_store);
 
     (raft, app)
 }

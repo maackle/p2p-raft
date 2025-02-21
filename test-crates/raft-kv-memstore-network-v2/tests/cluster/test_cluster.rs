@@ -1,6 +1,7 @@
 use std::backtrace::Backtrace;
 use std::collections::BTreeMap;
 use std::panic::PanicHookInfo;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use raft_kv_memstore_network_v2::new_raft;
@@ -58,7 +59,7 @@ async fn test_cluster() {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    let router = Router::default();
+    let router = Arc::new(Mutex::new(Router::default()));
 
     let local = LocalSet::new();
 
@@ -72,13 +73,13 @@ async fn test_cluster() {
             task::spawn_local(app1.run());
             task::spawn_local(app2.run());
 
-            run_test(&rafts, router).await;
+            run_test(&rafts).await;
         })
         .await;
 }
 
-async fn run_test(rafts: &[typ::Raft], router: Router) {
-    let _ = router;
+async fn run_test(rafts: &[typ::Raft]) {
+    // let _ = router;
 
     // Wait for server to start up.
     tokio::time::sleep(Duration::from_millis(200)).await;

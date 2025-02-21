@@ -9,6 +9,7 @@ use tokio::sync::oneshot;
 
 use crate::api;
 use crate::router::Router;
+use crate::router::RouterNode;
 use crate::typ::*;
 use crate::NodeId;
 use crate::StateMachineStore;
@@ -67,30 +68,25 @@ pub struct App {
 
     /// Receive application requests, Raft protocol request or management requests.
     pub rx: mpsc::UnboundedReceiver<(RpcRequest, ResponseTx)>,
-    pub router: Router,
+    pub node: RouterNode,
 
     pub state_machine: Arc<StateMachineStore>,
 }
 
 impl App {
-    pub fn new(
-        id: NodeId,
-        raft: Raft,
-        router: Router,
-        state_machine: Arc<StateMachineStore>,
-    ) -> Self {
+    pub fn new(raft: Raft, node: RouterNode, state_machine: Arc<StateMachineStore>) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
 
         {
-            let mut targets = router.targets.lock().unwrap();
-            targets.insert(id, tx);
+            let mut r = node.router.lock().unwrap();
+            r.targets.insert(node.source, tx);
         }
 
         Self {
-            id,
+            id: node.source,
             raft,
             rx,
-            router,
+            node,
             state_machine,
         }
     }

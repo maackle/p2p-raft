@@ -9,16 +9,17 @@ use openraft::RaftNetworkFactory;
 use crate::app::RaftRequest;
 use crate::app::RpcRequest;
 use crate::router::Router;
+use crate::router::RouterNode;
 use crate::typ::*;
 use crate::NodeId;
 use crate::TypeConfig;
 
 pub struct Connection {
-    router: Router,
+    router: RouterNode,
     target: NodeId,
 }
 
-impl RaftNetworkFactory<TypeConfig> for Router {
+impl RaftNetworkFactory<TypeConfig> for RouterNode {
     type Network = Connection;
 
     async fn new_client(&mut self, target: NodeId, _node: &()) -> Self::Network {
