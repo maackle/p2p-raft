@@ -5,10 +5,10 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use openraft::Config;
+use router::RouterConnections;
 use router::RouterNode;
 
 use crate::app::App;
-use crate::router::Router;
 use crate::store::Request;
 use crate::store::Response;
 use crate::store::StateMachineData;
@@ -46,7 +46,7 @@ pub fn decode<T: serde::de::DeserializeOwned>(s: &str) -> T {
     serde_json::from_str(s).unwrap()
 }
 
-pub async fn new_raft(node_id: NodeId, router: Arc<Mutex<Router>>) -> (typ::Raft, App) {
+pub async fn new_raft(node_id: NodeId, router: Arc<Mutex<RouterConnections>>) -> (typ::Raft, App) {
     // Create a configuration for the raft instance.
     let config = Config {
         heartbeat_interval: 500,

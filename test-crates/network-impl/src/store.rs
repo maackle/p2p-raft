@@ -14,8 +14,9 @@ use crate::TypeConfig;
 
 pub type LogStore = memstore::LogStore<TypeConfig>;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, derive_more::From)]
 pub enum Request {
+    Num(u64),
     Set { key: String, value: String },
 }
 
@@ -92,7 +93,12 @@ impl RaftSnapshotBuilder<TypeConfig> for Arc<StateMachineStore> {
         };
 
         let snapshot_id = if let Some(last) = last_applied_log {
-            format!("{}-{}-{}", last.committed_leader_id(), last.index(), snapshot_idx)
+            format!(
+                "{}-{}-{}",
+                last.committed_leader_id(),
+                last.index(),
+                snapshot_idx
+            )
         } else {
             format!("--{}", snapshot_idx)
         };
@@ -125,12 +131,17 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
 
     async fn applied_state(&mut self) -> Result<(Option<LogId>, StoredMembership), StorageError> {
         let state_machine = self.state_machine.lock().unwrap();
-        Ok((state_machine.last_applied, state_machine.last_membership.clone()))
+        Ok((
+            state_machine.last_applied,
+            state_machine.last_membership.clone(),
+        ))
     }
 
     #[tracing::instrument(level = "trace", skip(self, entries))]
     async fn apply<I>(&mut self, entries: I) -> Result<Vec<Response>, StorageError>
-    where I: IntoIterator<Item = Entry> {
+    where
+        I: IntoIterator<Item = Entry>,
+    {
         let mut res = Vec::new(); //No `with_capacity`; do not know `len` of iterator
 
         let mut sm = self.state_machine.lock().unwrap();
@@ -149,6 +160,12 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
                             value: Some(value.clone()),
                         })
                     }
+                    Request::Num(num) => {
+                        sm.data.insert(num.to_string(), num.to_string());
+                        res.push(Response {
+                            value: Some(num.to_string()),
+                        })
+                    }
                 },
                 EntryPayload::Membership(ref mem) => {
                     sm.last_membership = StoredMembership::new(Some(entry.log_id), mem.clone());
@@ -165,7 +182,11 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore> {
     }
 
     #[tracing::instrument(level = "trace", skip(self, snapshot))]
-    async fn install_snapshot(&mut self, meta: &SnapshotMeta, snapshot: Box<SnapshotData>) -> Result<(), StorageError> {
+    async fn install_snapshot(
+        &mut self,
+        meta: &SnapshotMeta,
+        snapshot: Box<SnapshotData>,
+    ) -> Result<(), StorageError> {
         tracing::info!("install snapshot");
 
         let new_snapshot = StoredSnapshot {

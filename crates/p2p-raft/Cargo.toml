@@ -7,3 +7,9 @@ edition = "2024"
 openraft = { workspace = true }
 openraft-macros = { workspace = true }
 openraft-memstore = { workspace = true }
+
+memstore = { workspace = true }
+network-impl = { workspace = true }
+
+derive_more = { workspace = true }
+tokio = { workspace = true }

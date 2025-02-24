@@ -7,8 +7,6 @@ use openraft::ChangeMembers;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
-use crate::api;
-use crate::router::Router;
 use crate::router::RouterNode;
 use crate::typ::*;
 use crate::NodeId;

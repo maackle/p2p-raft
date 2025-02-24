@@ -3,7 +3,7 @@
 members = [
   "crates/p2p-raft",
   "test-crates/memstore",
-  "test-crates/raft-kv-memstore-network-v2",
+  "test-crates/network-impl",
 ]
 
 resolver = "3"
@@ -17,3 +17,8 @@ openraft = { git = "https://github.com/maackle/openraft.git", features = [
 ] }
 openraft-macros = { git = "https://github.com/maackle/openraft.git" }
 openraft-memstore = { git = "https://github.com/maackle/openraft.git" }
+
+memstore = { path = "test-crates/memstore" }
+network-impl = { path = "test-crates/network-impl" }
+
+tokio = { version = "1.0", features = ["full"] }

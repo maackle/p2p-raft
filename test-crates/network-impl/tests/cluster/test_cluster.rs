@@ -4,10 +4,10 @@ use std::panic::PanicHookInfo;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use raft_kv_memstore_network_v2::new_raft;
-use raft_kv_memstore_network_v2::router::Router;
-use raft_kv_memstore_network_v2::store::Request;
-use raft_kv_memstore_network_v2::typ;
+use network_impl::new_raft;
+use network_impl::router::RouterConnections;
+use network_impl::store::Request;
+use network_impl::typ;
 use tokio::task;
 use tokio::task::LocalSet;
 use tracing_subscriber::EnvFilter;
@@ -59,7 +59,7 @@ async fn test_cluster() {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    let router = Arc::new(Mutex::new(Router::default()));
+    let router = Arc::new(Mutex::new(RouterConnections::default()));
 
     let local = LocalSet::new();
 

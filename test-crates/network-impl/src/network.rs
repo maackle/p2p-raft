@@ -38,7 +38,7 @@ impl RaftNetworkV2<TypeConfig> for Connection {
     ) -> Result<AppendEntriesResponse, RPCError> {
         let resp = self
             .router
-            .send(self.target, RpcRequest::Raft(RaftRequest::Append(req)))
+            .raft_request(self.target, RaftRequest::Append(req))
             .await?;
         Ok(resp.unwrap_raft().unwrap_append())
     }
@@ -53,10 +53,7 @@ impl RaftNetworkV2<TypeConfig> for Connection {
     ) -> Result<SnapshotResponse, StreamingError> {
         let resp = self
             .router
-            .send(
-                self.target,
-                RpcRequest::Raft(RaftRequest::Snapshot { vote, snapshot }),
-            )
+            .raft_request(self.target, RaftRequest::Snapshot { vote, snapshot })
             .await?;
         Ok(resp.unwrap_raft().unwrap_snapshot())
     }
@@ -68,7 +65,7 @@ impl RaftNetworkV2<TypeConfig> for Connection {
     ) -> Result<VoteResponse, RPCError> {
         let resp = self
             .router
-            .send(self.target, RpcRequest::Raft(RaftRequest::Vote(req)))
+            .raft_request(self.target, RaftRequest::Vote(req))
             .await?;
         Ok(resp.unwrap_raft().unwrap_vote())
     }

@@ -1,5 +1,5 @@
 [package]
-name = "raft-kv-memstore-network-v2"
+name = "network-impl"
 version = "0.1.0"
 readme = "README.md"
 
