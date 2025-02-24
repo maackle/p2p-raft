@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
+use std::time::Instant;
 
 use openraft::error::Timeout;
 use openraft::RPCTypes;
@@ -61,6 +62,7 @@ impl Router {
 #[derive(Debug, Clone, Default)]
 pub struct RouterConnections {
     pub targets: BTreeMap<NodeId, RequestTx>,
+    pub last_response: BTreeMap<NodeId, Instant>,
     pub latency: HashMap<(NodeId, NodeId), u64>,
     pub partitions: BTreeMap<NodeId, PartitionId>,
 }
@@ -127,7 +129,11 @@ impl RouterNode {
 
         let res = resp_rx.await.unwrap();
         tracing::debug!("resp from: {}, {:?}", to, res);
-
+        self.router
+            .lock()
+            .unwrap()
+            .last_response
+            .insert(to, Instant::now());
         Ok(res)
     }
 }
