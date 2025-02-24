@@ -641,6 +641,7 @@ dependencies = [
  "maplit",
  "memstore",
  "openraft",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "tokio",
@@ -740,12 +741,15 @@ name = "p2p-raft"
 version = "0.1.0"
 dependencies = [
  "derive_more",
+ "maplit",
  "memstore",
  "network-impl",
  "openraft",
  "openraft-macros",
  "openraft-memstore",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

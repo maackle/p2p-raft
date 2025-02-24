@@ -1,26 +1,20 @@
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::convert::Infallible;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use openraft::anyerror;
 use openraft::error::Timeout;
-use openraft::error::Unreachable;
 use openraft::RPCTypes;
+use rand::Rng;
 use tokio::sync::oneshot;
 
-use crate::app::App;
-use crate::app::ManagementRequest;
 use crate::app::RaftRequest;
 use crate::app::RequestTx;
 use crate::app::RpcRequest;
 use crate::app::RpcResponse;
-use crate::decode;
-use crate::encode;
+
 use crate::typ::Raft;
-use crate::typ::RaftError;
 use crate::NodeId;
 use crate::TypeConfig;
 
@@ -33,12 +27,6 @@ pub struct RouterNode {
 
 #[derive(Debug, Default, Clone, derive_more::Deref)]
 pub struct Router(Arc<Mutex<RouterConnections>>);
-
-#[derive(Debug, Clone, Default)]
-pub struct RouterConnections {
-    pub targets: BTreeMap<NodeId, RequestTx>,
-    pub connection: HashMap<(NodeId, NodeId), u64>,
-}
 
 impl Router {
     pub async fn add_nodes(
@@ -61,6 +49,36 @@ impl Router {
             router: self.0.clone(),
         }
     }
+
+    pub fn partition(
+        &mut self,
+        partitions: impl IntoIterator<Item = impl IntoIterator<Item = NodeId>>,
+    ) {
+        self.0.lock().unwrap().partition(partitions);
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RouterConnections {
+    pub targets: BTreeMap<NodeId, RequestTx>,
+    pub latency: HashMap<(NodeId, NodeId), u64>,
+    pub partitions: BTreeMap<NodeId, PartitionId>,
+}
+
+pub type PartitionId = u64;
+
+impl RouterConnections {
+    pub fn partition(
+        &mut self,
+        partitions: impl IntoIterator<Item = impl IntoIterator<Item = NodeId>>,
+    ) {
+        for p in partitions {
+            let id = rand::thread_rng().gen();
+            for n in p {
+                self.partitions.insert(n, id);
+            }
+        }
+    }
 }
 
 impl RouterNode {
@@ -79,6 +97,16 @@ impl RouterNode {
 
         let delay = {
             let mut r = self.router.lock().unwrap();
+
+            if r.partitions.get(&min) != r.partitions.get(&max) {
+                // can't communicate across partitions
+                return Err(Timeout {
+                    action: RPCTypes::Vote,
+                    id: self.source,
+                    target: to,
+                    timeout: Duration::from_secs(1337),
+                });
+            }
             // if let Some(latency) =  {
             // } else {
             //     return Err(Timeout {
@@ -90,7 +118,7 @@ impl RouterNode {
             // }
             let tx = r.targets.get_mut(&to).unwrap();
             tx.send((RpcRequest::Raft(req), resp_tx)).unwrap();
-            r.connection.get(&(min, max)).cloned()
+            r.latency.get(&(min, max)).cloned()
         };
 
         if let Some(delay) = delay {
