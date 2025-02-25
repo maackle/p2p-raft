@@ -2,10 +2,9 @@
 #![deny(unused_qualifications)]
 
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use openraft::Config;
-use router::RouterConnections;
+use router::Router;
 use router::RouterNode;
 
 use crate::app::App;
@@ -46,7 +45,7 @@ pub fn decode<T: serde::de::DeserializeOwned>(s: &str) -> T {
     serde_json::from_str(s).unwrap()
 }
 
-pub async fn new_raft(node_id: NodeId, router: Arc<Mutex<RouterConnections>>) -> (typ::Raft, App) {
+pub async fn new_raft(node_id: NodeId, router: Router) -> (typ::Raft, App) {
     // Create a configuration for the raft instance.
     let config = Config {
         heartbeat_interval: 500,

@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use network_impl::new_raft;
-use network_impl::router::RouterConnections;
+use network_impl::router::{Router, RouterConnections};
 use network_impl::store::Request;
 use network_impl::typ;
 use tokio::task;
@@ -59,7 +59,7 @@ async fn test_cluster() {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    let router = Arc::new(Mutex::new(RouterConnections::default()));
+    let router = Router::default();
 
     let local = LocalSet::new();
 

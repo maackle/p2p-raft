@@ -49,13 +49,13 @@ async fn await_leaders(rafts: &[Dinghy], previous: Option<BTreeSet<u64>>) -> BTr
             if let Some(leader) = raft.current_leader().await {
                 leaders.insert(leader);
             } else {
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
                 continue;
             }
         }
         if let Some(previous) = previous.as_ref() {
             if leaders == *previous {
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
                 continue;
             }
         }

@@ -23,7 +23,7 @@ use crate::TypeConfig;
 #[derive(Debug, Clone)]
 pub struct RouterNode {
     pub source: NodeId,
-    pub router: Arc<Mutex<RouterConnections>>,
+    pub router: Router,
 }
 
 #[derive(Debug, Default, Clone, derive_more::Deref)]
@@ -37,7 +37,7 @@ impl Router {
         let mut rafts = Vec::new();
         let mut js = tokio::task::JoinSet::new();
         for node in nodes {
-            let (raft, app) = crate::new_raft(node, self.0.clone()).await;
+            let (raft, app) = crate::new_raft(node, self.clone()).await;
             js.spawn(async move { app.run().await.unwrap() });
             rafts.push(raft);
         }
@@ -47,7 +47,7 @@ impl Router {
     pub fn node(&self, id: NodeId) -> RouterNode {
         RouterNode {
             source: id,
-            router: self.0.clone(),
+            router: self.clone(),
         }
     }
 
