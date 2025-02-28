@@ -16,6 +16,7 @@ use tokio::sync::Mutex;
 use tokio::sync::oneshot;
 
 use crate::Dinghy;
+use crate::RESPONSIVE_INTERVAL;
 
 use super::RaftRequest;
 use super::RaftResponse;
@@ -38,11 +39,11 @@ impl<C: RaftTypeConfig> Router<C> {
         }
     }
 
-    pub async fn partitions(
+    pub async fn create_partitions(
         &mut self,
         partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,
     ) {
-        self.0.lock().await.partitions(partitions);
+        self.0.lock().await.create_partitions(partitions);
     }
 }
 
@@ -71,7 +72,7 @@ pub struct RouterConnections<C: RaftTypeConfig> {
 pub type PartitionId = u64;
 
 impl<C: RaftTypeConfig> RouterConnections<C> {
-    pub fn partitions(
+    pub fn create_partitions(
         &mut self,
         partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,
     ) {
@@ -81,17 +82,45 @@ impl<C: RaftTypeConfig> RouterConnections<C> {
                 self.partitions.insert(n, id);
             }
         }
+        println!(
+            "\n\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~ PARTITION ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n{:?}\n\n",
+            self.show_partitions()
+        );
+    }
+
+    pub fn show_partitions(&self) -> BTreeSet<BTreeSet<C::NodeId>> {
+        let mut partitions = BTreeMap::new();
+        let mut all = self.targets.keys().cloned().collect::<BTreeSet<_>>();
+        for (node, id) in self.partitions.iter() {
+            all.remove(&node);
+            partitions
+                .entry(id)
+                .or_insert_with(BTreeSet::new)
+                .insert(node.clone());
+        }
+        let mut partitions: BTreeSet<BTreeSet<C::NodeId>> = partitions.values().cloned().collect();
+        partitions.insert(all);
+        partitions
     }
 }
 
-impl<C: RaftTypeConfig> RouterNode<C> {
+impl<C: RaftTypeConfig> RouterNode<C>
+where
+    C::SnapshotData: std::fmt::Debug,
+    C: RaftTypeConfig<Responder = openraft::impls::OneshotResponder<C>>,
+{
     /// Send raft request `Req` to target node `to`, and wait for response `Result<Resp, RaftError<E>>`.
     pub async fn raft_request(
         &self,
         to: C::NodeId,
-        op: RaftRequest<C>,
+        req: RaftRequest<C>,
     ) -> Result<RaftResponse<C>, Unreachable> {
-        // println!("req: {} -> {}", self.source, to);
+        const LOG: bool = false;
+
+        if LOG {
+            // println!("req: {} -> {}: {:?}", self.source, to, &req);
+            println!("req: {} -> {}", self.source, to);
+        }
 
         let min = self.source.clone().min(to.clone());
         let max = self.source.clone().max(to.clone());
@@ -100,7 +129,9 @@ impl<C: RaftTypeConfig> RouterNode<C> {
             let r = self.router.lock().await;
 
             if r.partitions.get(&min) != r.partitions.get(&max) {
-                // println!("dropped.");
+                if LOG {
+                    println!("dropped.");
+                }
 
                 // can't communicate across partitions
                 return Err(Unreachable::new(&std::io::Error::other(
@@ -124,7 +155,7 @@ impl<C: RaftTypeConfig> RouterNode<C> {
         let res: RaftResponse<C> = {
             let r = self.router.lock().await;
             let ding = r.targets.get(&to).unwrap().clone();
-            match op {
+            match req {
                 RaftRequest::Append(req) => ding
                     .append_entries(req)
                     .await
@@ -145,16 +176,27 @@ impl<C: RaftTypeConfig> RouterNode<C> {
 
         tokio::time::sleep(delay).await;
 
-        // println!("resp {} <- {}", self.source, to);
-        // println!("resp {}<-{}, {:?}", self.source, to, res);
+        if LOG {
+            println!("resp {} <- {}", self.source, to);
+            // println!("resp {} <- {}: {:?}", self.source, to, res);
+        }
 
         let d = {
             let r = self.router.lock().await;
             r.targets.get(&self.source).unwrap().clone()
         };
 
-        println!("touching {} <- {}", self.source, to);
-        d.tracker.lock().await.touch(&to);
+        // println!("touching {} <- {}", self.source, to);
+
+        {
+            let mut t = d.tracker.lock().await;
+
+            t.touch(&to);
+
+            // TODO: only the leader should do this
+            // dbg!(d.id);
+            t.handle_absentees(&d, RESPONSIVE_INTERVAL).await;
+        }
 
         Ok(res)
     }

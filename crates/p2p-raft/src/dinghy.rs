@@ -12,23 +12,30 @@ use crate::peer_tracker::PeerTracker;
 pub struct Dinghy<C: RaftTypeConfig> {
     #[deref]
     pub raft: Raft<C>,
+    pub id: C::NodeId,
     pub tracker: Arc<Mutex<PeerTracker<C>>>,
 }
 
 impl<C: RaftTypeConfig> Dinghy<C> {
-    pub fn new(raft: Raft<C>) -> Self {
+    pub fn new(id: C::NodeId, raft: Raft<C>) -> Self {
         Self {
+            id,
             raft,
             tracker: PeerTracker::new(),
         }
     }
 
-    pub fn id(&self) -> C::NodeId
-    where
-        C: RaftTypeConfig<AsyncRuntime = openraft::TokioRuntime>,
-    {
-        self.raft.metrics().borrow().id.clone()
-    }
+    // pub fn id(&self) -> C::NodeId
+    // where
+    //     C: RaftTypeConfig<AsyncRuntime = openraft::TokioRuntime>,
+    // {
+    //     self.raft.metrics().borrow().id.clone()
+    // }
+
+    // pub async fn is_leader(&self) -> bool {
+    //     #[allow(deprecated)]
+    //     self.raft.is_leader().await.is_ok()
+    // }
 
     pub async fn initialize(
         &self,

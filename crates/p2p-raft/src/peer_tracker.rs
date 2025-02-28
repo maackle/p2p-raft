@@ -4,8 +4,13 @@ use std::{
     time::Duration,
 };
 
-use openraft::{ChangeMembers, Raft, RaftTypeConfig, error::RaftError};
+use openraft::{
+    ChangeMembers, Raft, RaftTypeConfig,
+    error::{ClientWriteError, RaftError},
+};
 use tokio::{sync::Mutex, time::Instant};
+
+use crate::Dinghy;
 
 pub struct PeerTracker<C: RaftTypeConfig> {
     last_seen: BTreeMap<C::NodeId, Instant>,
@@ -22,25 +27,40 @@ impl<C: RaftTypeConfig> PeerTracker<C> {
         self.last_seen.insert(node.clone(), Instant::now());
     }
 
-    pub async fn handle_absentees(&mut self, raft: &Raft<C>, interval: Duration)
+    pub async fn handle_absentees(&mut self, raft: &Dinghy<C>, interval: Duration)
     where
         C: RaftTypeConfig<Responder = openraft::impls::OneshotResponder<C>>,
     {
         let unresponsive = self.unresponsive_members(raft, interval).await;
-        dbg!(&unresponsive);
-
-        // XXX: this hack ensures that we only attempt removing nodes once per PRESENCE_WINDOW.
-        //      if they are removed by the next time the interval expires, they won't show up
-        //      in the next unresponsive set.
-        for p in unresponsive.iter() {
-            self.touch(p);
-        }
-
-        if let Err(e) = raft
-            .change_membership(ChangeMembers::RemoveVoters(unresponsive), true)
-            .await
-        {
-            tracing::error!("Failed to remove absentees: {e:?}");
+        if !unresponsive.is_empty() {
+            if let Err(e) = raft
+                .change_membership(ChangeMembers::RemoveVoters(unresponsive.clone()), true)
+                .await
+            {
+                match e {
+                    RaftError::APIError(ClientWriteError::ChangeMembershipError(
+                        openraft::error::ChangeMembershipError::InProgress(_),
+                    )) => {}
+                    RaftError::APIError(ClientWriteError::ForwardToLeader(_)) => {}
+                    // RaftError::APIError(ClientWriteError::ChangeMembershipError(
+                    //     openraft::error::ChangeMembershipError::EmptyMembership(_),
+                    // )) => {}
+                    // RaftError::APIError(ClientWriteError::ChangeMembershipError(
+                    //     openraft::error::ChangeMembershipError::LearnerNotFound(_),
+                    // )) => {}
+                    _ => {
+                        println!("ERROR: Failed to remove absentees: {}, {e:?}", raft.id);
+                    }
+                }
+            } else {
+                println!("MEMBERSHIP CHANGED, removed {:?}", unresponsive);
+                // XXX: this hack ensures that we only attempt removing nodes once per PRESENCE_WINDOW.
+                //      if they are removed by the next time the interval expires, they won't show up
+                //      in the next unresponsive set.
+                for p in unresponsive.iter() {
+                    self.touch(p);
+                }
+            }
         }
     }
 
@@ -56,20 +76,23 @@ impl<C: RaftTypeConfig> PeerTracker<C> {
 
     async fn unresponsive_members(
         &self,
-        raft: &Raft<C>,
+        raft: &Dinghy<C>,
         interval: Duration,
     ) -> BTreeSet<C::NodeId> {
         let here = self.responsive_peers(interval);
 
-        let all_members = raft
+        let mut all_members = raft
             .with_raft_state(move |s| {
                 s.membership_state
-                    .effective()
+                    .committed()
+                    // .effective()
                     .voter_ids()
                     .collect::<BTreeSet<_>>()
             })
             .await
             .unwrap_or_default();
+
+        all_members.remove(&raft.id);
 
         all_members.difference(&here).cloned().collect()
     }
