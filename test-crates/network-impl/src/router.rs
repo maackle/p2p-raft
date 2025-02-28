@@ -38,25 +38,6 @@ impl Router {
         let mut rafts = Vec::new();
         let mut js = tokio::task::JoinSet::new();
         let nodes = nodes.into_iter().collect::<Vec<_>>();
-        let nodes2 = nodes.clone();
-        let router = self.clone();
-
-        js.spawn(async move {
-            loop {
-                for node in nodes2.iter() {
-                    println!(
-                        "who's here {}: {:?}",
-                        node,
-                        router
-                            .lock()
-                            .unwrap()
-                            .whos_here(*node, Duration::from_secs(5))
-                    );
-                }
-                println!("...............");
-                tokio::time::sleep(Duration::from_secs(1)).await;
-            }
-        });
 
         for node in nodes {
             let (raft, app) = crate::new_raft(node, self.clone()).await;
@@ -85,7 +66,6 @@ impl Router {
 #[derive(Debug, Clone, Default)]
 pub struct RouterConnections {
     pub targets: BTreeMap<NodeId, RequestTx>,
-    pub last_response: BTreeMap<(NodeId, NodeId), Instant>,
     pub latency: HashMap<(NodeId, NodeId), u64>,
     pub partitions: BTreeMap<NodeId, PartitionId>,
 }
@@ -103,18 +83,6 @@ impl RouterConnections {
                 self.partitions.insert(n, id);
             }
         }
-    }
-
-    pub fn whos_here(&self, source: NodeId, interval: Duration) -> BTreeSet<NodeId> {
-        let here = self
-            .last_response
-            .iter()
-            .filter(|((s, _), t)| *s == source && t.elapsed() < interval)
-            .map(|((_, to), _)| to)
-            .copied()
-            .collect();
-
-        here
     }
 }
 
@@ -168,11 +136,8 @@ impl RouterNode {
         // println!("resp {} <- {}", self.source, to);
         // println!("resp {}<-{}, {:?}", self.source, to, res);
 
-        self.router
-            .lock()
-            .unwrap()
-            .last_response
-            .insert((self.source, to), Instant::now());
+        todo!("touch tracker");
+
         Ok(res)
     }
 }

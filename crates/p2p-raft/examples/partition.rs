@@ -1,8 +1,9 @@
 use maplit::btreeset;
 use std::collections::BTreeSet;
 
-use network_impl::router::Router;
-use p2p_raft::Dinghy;
+use network_impl::{TypeConfig, router::Router};
+
+pub type Dinghy = p2p_raft::Dinghy<TypeConfig>;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
@@ -16,7 +17,7 @@ async fn main() {
     let (rafts, _js) = router.add_nodes(0..N).await;
     let rafts = rafts
         .into_iter()
-        .map(|r| Dinghy::from(r))
+        .map(|r| Dinghy::new(r))
         .collect::<Vec<_>>();
 
     for raft in rafts.iter() {
