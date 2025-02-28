@@ -15,7 +15,9 @@ repository = "https://github.com/databendlabs/openraft"
 [dependencies]
 openraft = { workspace = true, features = ["type-alias"] }
 
+serde = { workspace = true }
 tokio = { version = "1.0", default-features = false, features = ["sync"] }
+tracing = { workspace = true }
 
 [features]
 

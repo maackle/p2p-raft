@@ -16,6 +16,10 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+memstore = { workspace = true, optional = true }
+
 [dev-dependencies]
-memstore = { workspace = true }
-network-impl = { workspace = true }
+
+[features]
+default = ["testing"]
+testing = ["memstore"]

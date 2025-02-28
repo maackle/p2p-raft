@@ -1,9 +1,13 @@
 use maplit::btreeset;
 use std::{collections::BTreeSet, time::Duration};
 
-use network_impl::{TypeConfig, router::Router};
+use p2p_raft::testing::Router;
 
-pub type Dinghy = p2p_raft::Dinghy<TypeConfig>;
+pub type Request = String;
+pub type Response = ();
+pub type StateMachineData = Vec<Request>;
+
+pub type Dinghy = p2p_raft::Dinghy<memstore::TypeConfig>;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
@@ -14,11 +18,7 @@ async fn main() {
     const N: u64 = 5;
     let all_ids = (0..N).collect::<BTreeSet<_>>();
     let mut router = Router::default();
-    let (rafts, _js) = router.add_nodes(0..N).await;
-    let rafts = rafts
-        .into_iter()
-        .map(|r| Dinghy::new(r))
-        .collect::<Vec<_>>();
+    let rafts = router.add_nodes(0..N).await;
 
     for raft in rafts.iter() {
         raft.initialize(all_ids.clone()).await.unwrap();
@@ -27,12 +27,12 @@ async fn main() {
     let leader = await_single_leader(&rafts, None).await as usize;
     println!("leader: {leader}");
 
-    rafts[leader].client_write(0.into()).await.unwrap();
+    rafts[leader].client_write(0).await.unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let split = 3; //leader as u64;
     println!("----------------- PARTITIONED < {split} ---------------------");
-    router.partitions(vec![0..split, split..N]);
+    router.partitions(vec![0..split, split..N]).await;
 
     let leaders = await_leaders(&rafts, Some(btreeset![leader as u64])).await;
     // let leaders = await_leaders(&rafts, None).await;
@@ -56,7 +56,7 @@ async fn await_leaders(dinghies: &[Dinghy], previous: Option<BTreeSet<u64>>) -> 
                 .tracker
                 .lock()
                 .await
-                .responsive_peers(Duration::from_secs(1));
+                .responsive_peers(Duration::from_millis(250));
             println!("{} sees {:?}", dinghy.id(), here);
         }
         if let Some(previous) = previous.as_ref() {

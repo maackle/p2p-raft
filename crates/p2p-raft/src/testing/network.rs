@@ -1,13 +1,17 @@
 use std::future::Future;
 use std::time::Duration;
 
+use memstore::NodeId;
+use memstore::TypeConfig;
 use openraft::OptionalSend;
 use openraft::RPCTypes;
 use openraft::RaftNetworkFactory;
 use openraft::RaftTypeConfig;
 use openraft::Snapshot;
 use openraft::Vote;
+use openraft::error::RPCError;
 use openraft::error::ReplicationClosed;
+use openraft::error::StreamingError;
 use openraft::error::Timeout;
 use openraft::network::RPCOption;
 use openraft::network::v2::RaftNetworkV2;
@@ -17,18 +21,15 @@ use openraft::raft::SnapshotResponse;
 use openraft::raft::VoteRequest;
 use openraft::raft::VoteResponse;
 
-use crate::router::RouterNode;
-use network_impl::NodeId;
-use network_impl::TypeConfig;
-use network_impl::typ;
+use super::router::RouterNode;
 
-pub struct Connection {
-    router: RouterNode<TypeConfig>,
-    target: NodeId,
+pub struct Connection<C: RaftTypeConfig> {
+    router: RouterNode<C>,
+    target: C::NodeId,
 }
 
 impl RaftNetworkFactory<TypeConfig> for RouterNode<TypeConfig> {
-    type Network = Connection;
+    type Network = Connection<TypeConfig>;
 
     async fn new_client(&mut self, target: NodeId, _node: &()) -> Self::Network {
         Connection {
@@ -38,12 +39,12 @@ impl RaftNetworkFactory<TypeConfig> for RouterNode<TypeConfig> {
     }
 }
 
-impl RaftNetworkV2<TypeConfig> for Connection {
+impl RaftNetworkV2<TypeConfig> for Connection<TypeConfig> {
     async fn append_entries(
         &mut self,
-        req: typ::AppendEntriesRequest,
+        req: AppendEntriesRequest<TypeConfig>,
         _option: RPCOption,
-    ) -> Result<typ::AppendEntriesResponse, typ::RPCError> {
+    ) -> Result<AppendEntriesResponse<TypeConfig>, RPCError<TypeConfig>> {
         match self
             .router
             .raft_request(self.target, RaftRequest::Append(req))
@@ -60,11 +61,11 @@ impl RaftNetworkV2<TypeConfig> for Connection {
     /// A real application should replace this method with customized implementation.
     async fn full_snapshot(
         &mut self,
-        vote: typ::Vote,
-        snapshot: typ::Snapshot,
+        vote: Vote<TypeConfig>,
+        snapshot: Snapshot<TypeConfig>,
         _cancel: impl Future<Output = ReplicationClosed> + OptionalSend + 'static,
         _option: RPCOption,
-    ) -> Result<typ::SnapshotResponse, typ::StreamingError> {
+    ) -> Result<SnapshotResponse<TypeConfig>, StreamingError<TypeConfig>> {
         match self
             .router
             .raft_request(self.target, RaftRequest::Snapshot { vote, snapshot })
@@ -80,9 +81,9 @@ impl RaftNetworkV2<TypeConfig> for Connection {
 
     async fn vote(
         &mut self,
-        req: typ::VoteRequest,
+        req: VoteRequest<TypeConfig>,
         _option: RPCOption,
-    ) -> Result<typ::VoteResponse, typ::RPCError> {
+    ) -> Result<VoteResponse<TypeConfig>, RPCError<TypeConfig>> {
         match self
             .router
             .raft_request(self.target, RaftRequest::Vote(req))

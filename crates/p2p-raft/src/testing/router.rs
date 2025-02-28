@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
+use memstore::TypeConfig;
 use openraft::RPCTypes;
 use openraft::Raft;
 use openraft::RaftTypeConfig;
@@ -15,8 +16,9 @@ use tokio::sync::Mutex;
 use tokio::sync::oneshot;
 
 use crate::Dinghy;
-use crate::network::RaftRequest;
-use crate::network::RaftResponse;
+
+use super::RaftRequest;
+use super::RaftResponse;
 
 /// Simulate a network router.
 #[derive(Clone)]
@@ -44,25 +46,18 @@ impl<C: RaftTypeConfig> Router<C> {
     }
 }
 
-impl Router<network_impl::TypeConfig> {
+impl Router<TypeConfig> {
     pub async fn add_nodes(
         &mut self,
         nodes: impl IntoIterator<Item = u64>,
-    ) -> (
-        Vec<Raft<network_impl::TypeConfig>>,
-        tokio::task::JoinSet<()>,
-    ) {
+    ) -> Vec<Dinghy<TypeConfig>> {
         let mut rafts = Vec::new();
-        let mut js = tokio::task::JoinSet::new();
-        let nodes = nodes.into_iter().collect::<Vec<_>>();
 
         for node in nodes {
-            let (raft, app) = crate::newraft::new_raft(node, self.clone()).await;
-
-            js.spawn(async move { app.run().await.unwrap() });
+            let raft = self.new_raft(node).await;
             rafts.push(raft);
         }
-        (rafts, js)
+        rafts
     }
 }
 

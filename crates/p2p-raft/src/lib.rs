@@ -1,11 +1,8 @@
 mod dinghy;
 mod peer_tracker;
+mod types;
 
-#[cfg(test)]
-mod network;
-#[cfg(test)]
-mod newraft;
-#[cfg(test)]
-mod router;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 pub use dinghy::Dinghy;
