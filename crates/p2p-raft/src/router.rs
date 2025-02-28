@@ -2,17 +2,21 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
 use openraft::RPCTypes;
 use openraft::Raft;
 use openraft::RaftTypeConfig;
+use openraft::error::RaftError;
 use openraft::error::Timeout;
+use openraft::error::Unreachable;
+use tokio::sync::Mutex;
 use tokio::sync::oneshot;
 
 use crate::Dinghy;
+use crate::network::RaftRequest;
+use crate::network::RaftResponse;
 
 /// Simulate a network router.
 #[derive(Clone)]
@@ -25,23 +29,6 @@ pub struct RouterNode<C: RaftTypeConfig> {
 pub struct Router<C: RaftTypeConfig>(Arc<Mutex<RouterConnections<C>>>);
 
 impl<C: RaftTypeConfig> Router<C> {
-    pub async fn add_nodes(
-        &mut self,
-        nodes: impl IntoIterator<Item = C::NodeId>,
-    ) -> (Vec<Raft<C>>, tokio::task::JoinSet<()>) {
-        let mut rafts = Vec::new();
-        let mut js = tokio::task::JoinSet::new();
-        let nodes = nodes.into_iter().collect::<Vec<_>>();
-
-        for node in nodes {
-            let (raft, app) = crate::new_raft(node, self.clone()).await;
-
-            js.spawn(async move { app.run().await.unwrap() });
-            rafts.push(raft);
-        }
-        (rafts, js)
-    }
-
     pub fn node(&self, id: C::NodeId) -> RouterNode<C> {
         RouterNode {
             source: id,
@@ -49,11 +36,33 @@ impl<C: RaftTypeConfig> Router<C> {
         }
     }
 
-    pub fn partitions(
+    pub async fn partitions(
         &mut self,
         partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,
     ) {
-        self.0.lock().unwrap().partitions(partitions);
+        self.0.lock().await.partitions(partitions);
+    }
+}
+
+impl Router<network_impl::TypeConfig> {
+    pub async fn add_nodes(
+        &mut self,
+        nodes: impl IntoIterator<Item = u64>,
+    ) -> (
+        Vec<Raft<network_impl::TypeConfig>>,
+        tokio::task::JoinSet<()>,
+    ) {
+        let mut rafts = Vec::new();
+        let mut js = tokio::task::JoinSet::new();
+        let nodes = nodes.into_iter().collect::<Vec<_>>();
+
+        for node in nodes {
+            let (raft, app) = crate::newraft::new_raft(node, self.clone()).await;
+
+            js.spawn(async move { app.run().await.unwrap() });
+            rafts.push(raft);
+        }
+        (rafts, js)
     }
 }
 
@@ -80,39 +89,28 @@ impl<C: RaftTypeConfig> RouterConnections<C> {
     }
 }
 
-// pub fn request<R>(&self, to: NodeId, f: impl FnOnce(&Dinghy<C>) -> R) -> R {
-//     let mut r = self.0.lock().unwrap();
-//     let tx = r.targets.get_mut(&to).unwrap();
-//     f(tx)
-// }
-
 impl<C: RaftTypeConfig> RouterNode<C> {
     /// Send raft request `Req` to target node `to`, and wait for response `Result<Resp, RaftError<E>>`.
     pub async fn raft_request(
         &self,
         to: C::NodeId,
-        f: impl FnOnce(&Dinghy<C>) -> R,
-    ) -> Result<RpcResponse, Timeout<TypeConfig>> {
-        let (resp_tx, resp_rx) = oneshot::channel();
-
+        op: RaftRequest<C>,
+    ) -> Result<RaftResponse<C>, Unreachable> {
         // println!("req: {} -> {}", self.source, to);
 
-        let min = self.source.min(to);
-        let max = self.source.max(to);
+        let min = self.source.clone().min(to.clone());
+        let max = self.source.clone().max(to.clone());
 
         let delay = {
-            let mut r = self.router.lock().unwrap();
+            let r = self.router.lock().await;
 
             if r.partitions.get(&min) != r.partitions.get(&max) {
                 // println!("dropped.");
 
                 // can't communicate across partitions
-                return Err(Timeout {
-                    action: RPCTypes::Vote,
-                    id: self.source,
-                    target: to,
-                    timeout: Duration::from_secs(1337),
-                });
+                return Err(Unreachable::new(&std::io::Error::other(
+                    "simulated network partition",
+                )));
             }
             // if let Some(latency) =  {
             // } else {
@@ -123,20 +121,45 @@ impl<C: RaftTypeConfig> RouterNode<C> {
             //         timeout: Duration::from_secs(1337),
             //     });
             // }
-            let tx = r.targets.get_mut(&to).unwrap();
-            tx.send((RpcRequest::Raft(req), resp_tx)).unwrap();
-            r.latency.get(&(min, max)).cloned()
+            Duration::from_millis(r.latency.get(&(min, max)).cloned().unwrap_or(0) / 2)
         };
 
-        if let Some(delay) = delay {
-            tokio::time::sleep(Duration::from_millis(delay)).await;
-        }
+        tokio::time::sleep(delay).await;
 
-        let res = resp_rx.await.unwrap();
+        let res: RaftResponse<C> = {
+            let r = self.router.lock().await;
+            let ding = r.targets.get(&to).unwrap().clone();
+            match op {
+                RaftRequest::Append(req) => ding
+                    .append_entries(req)
+                    .await
+                    .map_err(|e| Unreachable::new(&e))?
+                    .into(),
+                RaftRequest::Snapshot { vote, snapshot } => ding
+                    .install_full_snapshot(vote, snapshot)
+                    .await
+                    .map_err(|e| Unreachable::new(&e))?
+                    .into(),
+                RaftRequest::Vote(req) => ding
+                    .vote(req)
+                    .await
+                    .map_err(|e| Unreachable::new(&e))?
+                    .into(),
+            }
+        };
+
+        tokio::time::sleep(delay).await;
+
         // println!("resp {} <- {}", self.source, to);
         // println!("resp {}<-{}, {:?}", self.source, to, res);
 
-        todo!("touch tracker");
+        let d = {
+            let r = self.router.lock().await;
+            r.targets.get(&self.source).unwrap().clone()
+        };
+
+        println!("touching {} <- {}", self.source, to);
+        d.tracker.lock().await.touch(&to);
 
         Ok(res)
     }

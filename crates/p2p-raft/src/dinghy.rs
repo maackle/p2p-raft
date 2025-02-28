@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, fmt::Debug, sync::Arc};
+use std::{borrow::Borrow, collections::BTreeSet, fmt::Debug, sync::Arc};
 
 use openraft::{
     Raft, RaftTypeConfig,
@@ -21,6 +21,13 @@ impl<C: RaftTypeConfig> Dinghy<C> {
             raft,
             tracker: PeerTracker::new(),
         }
+    }
+
+    pub fn id(&self) -> C::NodeId
+    where
+        C: RaftTypeConfig<AsyncRuntime = openraft::TokioRuntime>,
+    {
+        self.raft.metrics().borrow().id.clone()
     }
 
     pub async fn initialize(

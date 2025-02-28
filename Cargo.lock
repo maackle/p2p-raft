@@ -756,6 +756,7 @@ name = "p2p-raft"
 version = "0.1.0"
 dependencies = [
  "derive_more",
+ "futures",
  "maplit",
  "memstore",
  "network-impl",
