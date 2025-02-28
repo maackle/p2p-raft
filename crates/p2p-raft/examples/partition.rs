@@ -10,7 +10,7 @@ async fn main() {
     //     .with_max_level(tracing::Level::WARN)
     //     .init();
 
-    const N: u64 = 10;
+    const N: u64 = 5;
     let all_ids = (0..N).collect::<BTreeSet<_>>();
     let mut router = Router::default();
     let (rafts, _js) = router.add_nodes(0..N).await;
@@ -27,12 +27,11 @@ async fn main() {
     println!("leader: {leader}");
 
     rafts[leader].client_write(0.into()).await.unwrap();
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-    let split = leader as u64 + 1;
-    router.partition(vec![0..split, split..N]);
-    // router.partition(vec![vec![leader as u64]]);
-
-    // tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    let split = 3; //leader as u64;
+    println!("----------------- PARTITIONED < {split} ---------------------");
+    router.partitions(vec![0..split, split..N]);
 
     let leaders = await_leaders(&rafts, Some(btreeset![leader as u64])).await;
     // let leaders = await_leaders(&rafts, None).await;
@@ -70,6 +69,6 @@ async fn await_single_leader(rafts: &[Dinghy], previous: Option<u64>) -> u64 {
         if leaders.len() == 1 {
             return leaders.into_iter().next().unwrap();
         }
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
     }
 }

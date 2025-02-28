@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -36,8 +37,30 @@ impl Router {
     ) -> (Vec<Raft>, tokio::task::JoinSet<()>) {
         let mut rafts = Vec::new();
         let mut js = tokio::task::JoinSet::new();
+        let nodes = nodes.into_iter().collect::<Vec<_>>();
+        let nodes2 = nodes.clone();
+        let router = self.clone();
+
+        js.spawn(async move {
+            loop {
+                for node in nodes2.iter() {
+                    println!(
+                        "who's here {}: {:?}",
+                        node,
+                        router
+                            .lock()
+                            .unwrap()
+                            .whos_here(*node, Duration::from_secs(5))
+                    );
+                }
+                println!("...............");
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        });
+
         for node in nodes {
             let (raft, app) = crate::new_raft(node, self.clone()).await;
+
             js.spawn(async move { app.run().await.unwrap() });
             rafts.push(raft);
         }
@@ -51,18 +74,18 @@ impl Router {
         }
     }
 
-    pub fn partition(
+    pub fn partitions(
         &mut self,
         partitions: impl IntoIterator<Item = impl IntoIterator<Item = NodeId>>,
     ) {
-        self.0.lock().unwrap().partition(partitions);
+        self.0.lock().unwrap().partitions(partitions);
     }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct RouterConnections {
     pub targets: BTreeMap<NodeId, RequestTx>,
-    pub last_response: BTreeMap<NodeId, Instant>,
+    pub last_response: BTreeMap<(NodeId, NodeId), Instant>,
     pub latency: HashMap<(NodeId, NodeId), u64>,
     pub partitions: BTreeMap<NodeId, PartitionId>,
 }
@@ -70,16 +93,28 @@ pub struct RouterConnections {
 pub type PartitionId = u64;
 
 impl RouterConnections {
-    pub fn partition(
+    pub fn partitions(
         &mut self,
         partitions: impl IntoIterator<Item = impl IntoIterator<Item = NodeId>>,
     ) {
         for p in partitions {
-            let id = rand::thread_rng().gen();
+            let id = rand::rng().random();
             for n in p {
                 self.partitions.insert(n, id);
             }
         }
+    }
+
+    pub fn whos_here(&self, source: NodeId, interval: Duration) -> BTreeSet<NodeId> {
+        let here = self
+            .last_response
+            .iter()
+            .filter(|((s, _), t)| *s == source && t.elapsed() < interval)
+            .map(|((_, to), _)| to)
+            .copied()
+            .collect();
+
+        here
     }
 }
 
@@ -92,7 +127,7 @@ impl RouterNode {
     ) -> Result<RpcResponse, Timeout<TypeConfig>> {
         let (resp_tx, resp_rx) = oneshot::channel();
 
-        tracing::debug!("send to: {}, {:?}", to, req);
+        // println!("req: {} -> {}", self.source, to);
 
         let min = self.source.min(to);
         let max = self.source.max(to);
@@ -101,6 +136,8 @@ impl RouterNode {
             let mut r = self.router.lock().unwrap();
 
             if r.partitions.get(&min) != r.partitions.get(&max) {
+                // println!("dropped.");
+
                 // can't communicate across partitions
                 return Err(Timeout {
                     action: RPCTypes::Vote,
@@ -128,12 +165,14 @@ impl RouterNode {
         }
 
         let res = resp_rx.await.unwrap();
-        tracing::debug!("resp from: {}, {:?}", to, res);
+        // println!("resp {} <- {}", self.source, to);
+        // println!("resp {}<-{}, {:?}", self.source, to, res);
+
         self.router
             .lock()
             .unwrap()
             .last_response
-            .insert(to, Instant::now());
+            .insert((self.source, to), Instant::now());
         Ok(res)
     }
 }
