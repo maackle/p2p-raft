@@ -1,6 +1,5 @@
 use std::{collections::BTreeSet, fmt::Debug, sync::Arc};
 
-use network_impl::{NodeId, TypeConfig};
 use openraft::{
     Raft, RaftTypeConfig,
     error::{InitializeError, RaftError},

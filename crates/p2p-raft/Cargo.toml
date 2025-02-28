@@ -8,11 +8,14 @@ openraft = { workspace = true }
 openraft-macros = { workspace = true }
 openraft-memstore = { workspace = true }
 
-memstore = { workspace = true }
-network-impl = { workspace = true }
 
 derive_more = { workspace = true }
 maplit = { workspace = true }
+rand = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+memstore = { workspace = true }
+network-impl = { workspace = true }

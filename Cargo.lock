@@ -762,6 +762,7 @@ dependencies = [
  "openraft",
  "openraft-macros",
  "openraft-memstore",
+ "rand 0.8.5",
  "tokio",
  "tracing",
  "tracing-subscriber",

@@ -6,35 +6,29 @@ use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
-use openraft::error::Timeout;
 use openraft::RPCTypes;
-use rand::Rng;
+use openraft::Raft;
+use openraft::RaftTypeConfig;
+use openraft::error::Timeout;
 use tokio::sync::oneshot;
 
-use crate::app::RaftRequest;
-use crate::app::RequestTx;
-use crate::app::RpcRequest;
-use crate::app::RpcResponse;
-
-use crate::typ::Raft;
-use crate::NodeId;
-use crate::TypeConfig;
+use crate::Dinghy;
 
 /// Simulate a network router.
-#[derive(Debug, Clone)]
-pub struct RouterNode {
-    pub source: NodeId,
-    pub router: Router,
+#[derive(Clone)]
+pub struct RouterNode<C: RaftTypeConfig> {
+    pub source: C::NodeId,
+    pub router: Router<C>,
 }
 
-#[derive(Debug, Default, Clone, derive_more::Deref)]
-pub struct Router(Arc<Mutex<RouterConnections>>);
+#[derive(Default, Clone, derive_more::Deref)]
+pub struct Router<C: RaftTypeConfig>(Arc<Mutex<RouterConnections<C>>>);
 
-impl Router {
+impl<C: RaftTypeConfig> Router<C> {
     pub async fn add_nodes(
         &mut self,
-        nodes: impl IntoIterator<Item = NodeId>,
-    ) -> (Vec<Raft>, tokio::task::JoinSet<()>) {
+        nodes: impl IntoIterator<Item = C::NodeId>,
+    ) -> (Vec<Raft<C>>, tokio::task::JoinSet<()>) {
         let mut rafts = Vec::new();
         let mut js = tokio::task::JoinSet::new();
         let nodes = nodes.into_iter().collect::<Vec<_>>();
@@ -48,7 +42,7 @@ impl Router {
         (rafts, js)
     }
 
-    pub fn node(&self, id: NodeId) -> RouterNode {
+    pub fn node(&self, id: C::NodeId) -> RouterNode<C> {
         RouterNode {
             source: id,
             router: self.clone(),
@@ -57,28 +51,28 @@ impl Router {
 
     pub fn partitions(
         &mut self,
-        partitions: impl IntoIterator<Item = impl IntoIterator<Item = NodeId>>,
+        partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,
     ) {
         self.0.lock().unwrap().partitions(partitions);
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct RouterConnections {
-    pub targets: BTreeMap<NodeId, RequestTx>,
-    pub latency: HashMap<(NodeId, NodeId), u64>,
-    pub partitions: BTreeMap<NodeId, PartitionId>,
+#[derive(Clone, Default)]
+pub struct RouterConnections<C: RaftTypeConfig> {
+    pub targets: BTreeMap<C::NodeId, Dinghy<C>>,
+    pub latency: HashMap<(C::NodeId, C::NodeId), u64>,
+    pub partitions: BTreeMap<C::NodeId, PartitionId>,
 }
 
 pub type PartitionId = u64;
 
-impl RouterConnections {
+impl<C: RaftTypeConfig> RouterConnections<C> {
     pub fn partitions(
         &mut self,
-        partitions: impl IntoIterator<Item = impl IntoIterator<Item = NodeId>>,
+        partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,
     ) {
         for p in partitions {
-            let id = rand::rng().random();
+            let id = rand::random();
             for n in p {
                 self.partitions.insert(n, id);
             }
@@ -86,12 +80,18 @@ impl RouterConnections {
     }
 }
 
-impl RouterNode {
+// pub fn request<R>(&self, to: NodeId, f: impl FnOnce(&Dinghy<C>) -> R) -> R {
+//     let mut r = self.0.lock().unwrap();
+//     let tx = r.targets.get_mut(&to).unwrap();
+//     f(tx)
+// }
+
+impl<C: RaftTypeConfig> RouterNode<C> {
     /// Send raft request `Req` to target node `to`, and wait for response `Result<Resp, RaftError<E>>`.
     pub async fn raft_request(
         &self,
-        to: NodeId,
-        req: RaftRequest,
+        to: C::NodeId,
+        f: impl FnOnce(&Dinghy<C>) -> R,
     ) -> Result<RpcResponse, Timeout<TypeConfig>> {
         let (resp_tx, resp_rx) = oneshot::channel();
 
@@ -136,7 +136,7 @@ impl RouterNode {
         // println!("resp {} <- {}", self.source, to);
         // println!("resp {}<-{}, {:?}", self.source, to, res);
 
-        todo!("touch tracker")
+        todo!("touch tracker");
 
         Ok(res)
     }
