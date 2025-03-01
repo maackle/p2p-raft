@@ -11,6 +11,7 @@ openraft-memstore = { workspace = true }
 derive_more = { workspace = true }
 futures = { workspace = true }
 maplit = { workspace = true }
+nanoid = { workspace = true }
 rand = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

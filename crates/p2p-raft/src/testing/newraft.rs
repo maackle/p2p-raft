@@ -13,6 +13,7 @@ impl Router<TypeConfig> {
     pub async fn new_raft(&self, node_id: NodeId) -> Dinghy<TypeConfig> {
         // Create a configuration for the raft instance.
         let config = Config {
+            // snapshot_policy: SnapshotPolicy::LogsSinceLast(0),
             heartbeat_interval: 500,
             election_timeout_min: 1500,
             election_timeout_max: 3000,
@@ -40,13 +41,13 @@ impl Router<TypeConfig> {
             node_id,
             config,
             node.clone(),
-            log_store,
+            log_store.clone(),
             state_machine_store.clone(),
         )
         .await
         .unwrap();
 
-        let dinghy = Dinghy::new(node_id, raft);
+        let dinghy = Dinghy::new(node_id, raft, log_store);
 
         self.lock().await.targets.insert(node_id, dinghy.clone());
 

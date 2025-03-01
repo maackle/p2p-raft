@@ -22,9 +22,10 @@ openraft-memstore = { git = "https://github.com/maackle/openraft.git" }
 futures = "*"
 itertools = "*"
 memstore = { path = "test-crates/memstore" }
+nanoid = "*"
 network-impl = { path = "test-crates/network-impl" }
 parking_lot = "*"
-rand = { version = "*" }
+rand = { version = "0.9" }
 serde = "*"
 tokio = { version = "1.0", features = ["full"] }
 tracing = "*"

@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, collections::BTreeSet, fmt::Debug, sync::Arc};
 
+use memstore::StateMachineStore;
 use openraft::{
     Raft, RaftTypeConfig,
     error::{InitializeError, RaftError},
@@ -13,14 +14,16 @@ pub struct Dinghy<C: RaftTypeConfig> {
     #[deref]
     pub raft: Raft<C>,
     pub id: C::NodeId,
+    pub store: memstore::LogStore<C>,
     pub tracker: Arc<Mutex<PeerTracker<C>>>,
 }
 
 impl<C: RaftTypeConfig> Dinghy<C> {
-    pub fn new(id: C::NodeId, raft: Raft<C>) -> Self {
+    pub fn new(id: C::NodeId, raft: Raft<C>, store: memstore::LogStore<C>) -> Self {
         Self {
             id,
             raft,
+            store,
             tracker: PeerTracker::new(),
         }
     }
