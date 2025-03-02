@@ -83,6 +83,8 @@ async fn main() {
 ///      merging in the state machine, when that logic needs to be in the front end
 ///      and the merged snapshot is forced by the leader.
 async fn replace_snapshot(raft: &Dinghy, data: Vec<memstore::Request>) {
+    use openraft::storage::{RaftSnapshotBuilder, RaftStateMachine};
+
     let smd = {
         let mut sm = raft
             .raft
@@ -101,30 +103,32 @@ async fn replace_snapshot(raft: &Dinghy, data: Vec<memstore::Request>) {
         sm
     };
 
-    let term = smd
-        .last_applied
-        .map(|l| l.committed_leader_id().term)
-        .unwrap_or(0);
+    let snapshot = Box::new(smd.clone());
 
-    let snapshot_id = raft
-        .raft
-        .with_raft_state(|s| s.snapshot_meta.snapshot_id.clone())
-        .await
-        .unwrap();
-
-    let snapshot = Snapshot {
-        snapshot: Box::new(smd.clone()),
-        meta: SnapshotMeta {
-            last_log_id: smd.last_applied,
-            last_membership: smd.last_membership,
-            // snapshot_id,
-            snapshot_id: nanoid::nanoid!(),
-        },
+    let meta = SnapshotMeta {
+        last_log_id: smd.last_applied,
+        last_membership: smd.last_membership,
+        // snapshot_id,
+        snapshot_id: nanoid::nanoid!(),
     };
 
-    raft.install_full_snapshot(Vote::new(term, raft.id), snapshot)
-        .await
-        .unwrap();
+    raft.with_state_machine(move |s: &mut Arc<StateMachineStore<TypeConfig>>| {
+        async move {
+            s.clone()
+                .install_snapshot(&meta.clone(), snapshot)
+                .await
+                .unwrap();
+            s.build_snapshot().await.unwrap();
+        }
+        .boxed()
+    })
+    .await
+    .unwrap()
+    .unwrap();
+
+    // raft.install_full_snapshot(Vote::new(term, raft.id), snapshot)
+    //     .await
+    //     .unwrap();
 
     println!("replaced snapshot.");
 }
