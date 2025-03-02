@@ -33,12 +33,12 @@ pub struct RouterNode<C: RaftTypeConfig> {
 pub struct Router<C: RaftTypeConfig>(Arc<Mutex<RouterConnections<C>>>);
 
 impl<C: RaftTypeConfig> Router<C> {
-    pub fn node(&self, id: C::NodeId) -> RouterNode<C> {
-        RouterNode {
-            source: id,
-            router: self.clone(),
-        }
-    }
+    // pub fn node(&self, id: C::NodeId) -> RouterNode<C> {
+    //     RouterNode {
+    //         source: id,
+    //         router: self.clone(),
+    //     }
+    // }
 
     pub async fn create_partitions(
         &mut self,
