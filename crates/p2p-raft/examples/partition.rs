@@ -4,7 +4,7 @@ use memstore::{StateMachineStore, TypeConfig};
 use openraft::{EntryPayload, Snapshot, SnapshotMeta, Vote};
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
 
-use p2p_raft::testing::Router;
+use p2p_raft::{RESPONSIVE_INTERVAL, testing::Router};
 
 pub type Dinghy = p2p_raft::Dinghy<memstore::TypeConfig>;
 
@@ -18,20 +18,16 @@ async fn main() {
     //     .with_max_level(tracing::Level::ERROR)
     //     .init();
 
-    const N: u64 = 5;
-    let all_ids = (0..N).collect::<BTreeSet<_>>();
+    const NUM_PEERS: u64 = 5;
+    const PARTITION_DELAY: u64 = RESPONSIVE_INTERVAL.as_millis() as u64 * 3;
+
+    let all_ids = (0..NUM_PEERS).collect::<BTreeSet<_>>();
     let mut router = Router::default();
     let rafts = router.add_nodes(all_ids.clone()).await;
-
-    // router
-    //     .create_partitions(vec![vec![0], vec![1], vec![2], vec![3], vec![4]])
-    //     .await;
 
     println!("router created.");
 
     for (_, raft) in rafts.iter().enumerate() {
-        // let peers = all_ids.iter().take(i + 1).cloned().collect::<BTreeSet<_>>();
-        // dbg!(&peers);
         raft.initialize(all_ids.clone()).await.unwrap();
         println!("initialized {}.", raft.id);
         sleep(100).await;
@@ -39,28 +35,43 @@ async fn main() {
 
     spawn_info_loop(rafts.clone());
 
-    sleep(5000).await;
-
     let leader = await_single_leader(&rafts, None).await as usize;
-    println!("leader: {leader}");
 
-    rafts[leader].ensure_linearizable().await.unwrap();
-    rafts[leader].client_write(0).await.unwrap();
-    println!("wrote data.");
-    rafts[leader].ensure_linearizable().await.unwrap();
-    rafts[leader].client_write(1).await.unwrap();
-    println!("wrote data.");
-    rafts[leader].ensure_linearizable().await.unwrap();
-    rafts[leader].client_write(2).await.unwrap();
+    rafts[leader].write_linearizable(0).await.unwrap();
+    rafts[leader].write_linearizable(1).await.unwrap();
+    rafts[leader].write_linearizable(2).await.unwrap();
     println!("wrote data.");
 
-    for n in [0, 1] {
-        router.create_partitions(vec![vec![n]]).await;
-        sleep(5_000).await;
+    // now gradually whittle down the cluster until only 2 nodes are left
+    router.create_partitions(vec![vec![0, 1]]).await;
+    sleep(PARTITION_DELAY).await;
+    router.create_partitions(vec![vec![2]]).await;
+    sleep(PARTITION_DELAY).await;
+
+    // rafts[0].write_linearizable(3).await.unwrap();
+    // rafts[0].write_linearizable(4).await.unwrap();
+    // rafts[0].write_linearizable(5).await.unwrap();
+    // println!("wrote data in old raft.");
+
+    let leader = await_single_leader(&rafts[3..], Some(leader as u64)).await as usize;
+
+    rafts[leader].write_linearizable(3).await.unwrap();
+    rafts[leader].write_linearizable(4).await.unwrap();
+    rafts[leader].write_linearizable(5).await.unwrap();
+    println!("wrote data in remaining raft.");
+
+    router.create_partitions(vec![vec![0, 1, 2, 3, 4]]).await;
+
+    sleep(PARTITION_DELAY).await;
+
+    // TODO: re-add original nodes as voters when they are responsive again.
+
+    // one of the partitioned nodes will eventually have the full log
+    {
+        let log = rafts[0].read_log_data().await.unwrap();
+        println!("log: {log:?}");
+        assert_eq!(log, vec![0, 1, 2, 3, 4, 5]);
     }
-
-    let leader = await_single_leader(&rafts[3..], Some(leader as u64)).await;
-    println!("leader: {leader}");
 
     replace_snapshot(&rafts[leader as usize], vec![5, 4, 3, 2, 1]).await;
 
@@ -81,7 +92,12 @@ async fn replace_snapshot(raft: &Dinghy, data: Vec<memstore::Request>) {
             .await
             .unwrap()
             .unwrap();
+
         sm.data = data;
+        // sm.last_applied.map(|mut l| {
+        //     l.index += 1;
+        //     l
+        // });
         sm
     };
 
@@ -90,11 +106,18 @@ async fn replace_snapshot(raft: &Dinghy, data: Vec<memstore::Request>) {
         .map(|l| l.committed_leader_id().term)
         .unwrap_or(0);
 
+    let snapshot_id = raft
+        .raft
+        .with_raft_state(|s| s.snapshot_meta.snapshot_id.clone())
+        .await
+        .unwrap();
+
     let snapshot = Snapshot {
         snapshot: Box::new(smd.clone()),
         meta: SnapshotMeta {
             last_log_id: smd.last_applied,
             last_membership: smd.last_membership,
+            // snapshot_id,
             snapshot_id: nanoid::nanoid!(),
         },
     };
@@ -102,12 +125,11 @@ async fn replace_snapshot(raft: &Dinghy, data: Vec<memstore::Request>) {
     raft.install_full_snapshot(Vote::new(term, raft.id), snapshot)
         .await
         .unwrap();
+
+    println!("replaced snapshot.");
 }
 
 fn spawn_info_loop(mut rafts: Vec<Dinghy>) {
-    use openraft::RaftLogReader;
-    use openraft::storage::RaftLogStorage;
-
     tokio::spawn({
         const POLL_INTERVAL: Duration = Duration::from_millis(1000);
 
@@ -126,19 +148,7 @@ fn spawn_info_loop(mut rafts: Vec<Dinghy>) {
                         })
                         .await
                         .unwrap();
-                    let log = r
-                        .store
-                        .get_log_reader()
-                        .await
-                        .try_get_log_entries(..)
-                        .await
-                        .unwrap()
-                        .into_iter()
-                        .filter_map(|e| match e.payload {
-                            EntryPayload::Normal(n) => Some(n),
-                            _ => None,
-                        })
-                        .collect::<Vec<_>>();
+                    let log = r.read_log_data().await;
                     let snapshot = r
                         .raft
                         .get_snapshot()
@@ -188,7 +198,9 @@ async fn await_single_leader(rafts: &[Dinghy], previous: Option<u64>) -> u64 {
     loop {
         let leaders = await_leaders(rafts, previous.map(|p| btreeset![p])).await;
         if leaders.len() == 1 {
-            return leaders.into_iter().next().unwrap();
+            let leader = leaders.into_iter().next().unwrap();
+            println!("new leader: {leader}");
+            return leader;
         } else if leaders.len() > 1 {
             println!("multiple leaders: {leaders:?}");
         }

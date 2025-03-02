@@ -2,8 +2,10 @@ use std::{borrow::Borrow, collections::BTreeSet, fmt::Debug, sync::Arc};
 
 use memstore::StateMachineStore;
 use openraft::{
-    Raft, RaftTypeConfig,
+    Entry, EntryPayload, Raft, RaftTypeConfig, StorageError,
+    alias::ResponderReceiverOf,
     error::{InitializeError, RaftError},
+    raft::ClientWriteResult,
 };
 use tokio::sync::Mutex;
 
@@ -57,5 +59,38 @@ impl<C: RaftTypeConfig> Dinghy<C> {
             Err(RaftError::APIError(InitializeError::NotAllowed(_))) => Ok(()),
             e => e,
         }
+    }
+
+    pub async fn read_log_data(&self) -> anyhow::Result<Vec<C::D>>
+    where
+        C: RaftTypeConfig<Entry = Entry<C>>,
+        C::Entry: Clone,
+    {
+        use openraft::RaftLogReader;
+        use openraft::storage::RaftLogStorage;
+
+        Ok(self
+            .store
+            .clone()
+            .get_log_reader()
+            .await
+            .try_get_log_entries(..)
+            .await?
+            .into_iter()
+            .filter_map(|e: Entry<C>| match e.payload {
+                EntryPayload::Normal(n) => Some(n),
+                _ => None,
+            })
+            .collect::<Vec<_>>())
+    }
+
+    pub async fn write_linearizable<E>(&self, data: C::D) -> anyhow::Result<()>
+    where
+        ResponderReceiverOf<C>: Future<Output = Result<ClientWriteResult<C>, E>>,
+        E: std::error::Error + openraft::OptionalSend,
+    {
+        self.ensure_linearizable().await?;
+        self.raft.client_write(data).await?;
+        Ok(())
     }
 }

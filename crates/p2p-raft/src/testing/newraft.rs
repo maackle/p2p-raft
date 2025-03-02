@@ -5,7 +5,7 @@ use openraft::*;
 use memstore::{LogStore, NodeId, TypeConfig};
 
 use crate::{
-    Dinghy,
+    Dinghy, ELECTION_TIMEOUT_MAX, ELECTION_TIMEOUT_MIN, HEARTBEAT_INTERVAL,
     testing::{Router, RouterNode},
 };
 
@@ -14,9 +14,9 @@ impl Router<TypeConfig> {
         // Create a configuration for the raft instance.
         let config = Config {
             // snapshot_policy: SnapshotPolicy::LogsSinceLast(0),
-            heartbeat_interval: 500,
-            election_timeout_min: 1500,
-            election_timeout_max: 3000,
+            heartbeat_interval: HEARTBEAT_INTERVAL.as_millis() as u64,
+            election_timeout_min: ELECTION_TIMEOUT_MIN.as_millis() as u64,
+            election_timeout_max: ELECTION_TIMEOUT_MAX.as_millis() as u64,
             // Once snapshot is built, delete the logs at once.
             // So that all further replication will be based on the snapshot.
             max_in_snapshot_log_to_keep: 0,

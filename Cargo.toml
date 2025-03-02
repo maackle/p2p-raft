@@ -19,6 +19,7 @@ openraft = { git = "https://github.com/maackle/openraft.git", features = [
 openraft-macros = { git = "https://github.com/maackle/openraft.git" }
 openraft-memstore = { git = "https://github.com/maackle/openraft.git" }
 
+anyhow = "*"
 futures = "*"
 itertools = "*"
 memstore = { path = "test-crates/memstore" }

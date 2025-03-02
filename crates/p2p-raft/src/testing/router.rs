@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -71,13 +72,15 @@ pub struct RouterConnections<C: RaftTypeConfig> {
 
 pub type PartitionId = u64;
 
+static PARTITION_ID: AtomicU64 = AtomicU64::new(1);
+
 impl<C: RaftTypeConfig> RouterConnections<C> {
     pub fn create_partitions(
         &mut self,
         partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,
     ) {
         for p in partitions {
-            let id = rand::random();
+            let id = PARTITION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             for n in p {
                 self.partitions.insert(n, id);
             }
