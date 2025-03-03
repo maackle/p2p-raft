@@ -55,12 +55,10 @@ impl<C: TypeConf> P2pNetwork<C> for Router<C> {
         req: P2pRequest,
     ) -> impl Future<Output = anyhow::Result<()>> {
         async move {
-            dbg!(&source);
-            let r = self.lock().await;
-            dbg!(&source);
-            let tgt = r.targets.get(&target).unwrap();
+            // dbg!(&source);
+            let tgt = self.lock().targets.get(&target).unwrap().clone();
             tgt.handle_p2p_request(source.clone(), req).await?;
-            dbg!(&source);
+            // dbg!(&source);
             Ok(())
         }
     }

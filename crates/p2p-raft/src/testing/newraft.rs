@@ -49,7 +49,7 @@ impl Router<TypeConfig> {
 
         let dinghy = Dinghy::new(node_id, raft, log_store, self.clone());
 
-        self.lock().await.targets.insert(node_id, dinghy.clone());
+        self.lock().targets.insert(node_id, dinghy.clone());
 
         dinghy
     }

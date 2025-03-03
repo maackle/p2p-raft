@@ -30,6 +30,8 @@ pub fn spawn_info_loop(mut rafts: Vec<Dinghy>, poll_interval_ms: u64) {
         async move {
             loop {
                 interval.tick().await;
+                println!();
+                println!("........................................................");
                 for r in rafts.iter_mut() {
                     let t = r.tracker.lock().await;
                     let peers = t.responsive_peers(crate::RESPONSIVE_INTERVAL);
@@ -50,17 +52,21 @@ pub fn spawn_info_loop(mut rafts: Vec<Dinghy>, poll_interval_ms: u64) {
                         .await
                         .unwrap()
                         .map(|s| s.snapshot.data);
-                    println!(
-                        "  {}  <{:?}>  members {:?}   sees {:?}  snapshot {:?}   log {:?}",
-                        r.id,
-                        r.current_leader().await,
-                        members,
-                        peers,
-                        snapshot,
-                        log
-                    );
+
+                    let lines = [
+                        format!(".. "),
+                        format!("{}", r.id),
+                        format!("<{:?}>", r.current_leader().await),
+                        format!("members {:?}", members),
+                        format!("sees {:?}", peers),
+                        // format!("snapshot {:?}", snapshot),
+                        // format!("log {:?}", log),
+                    ];
+
+                    println!("{}", lines.into_iter().join(" "))
                 }
-                println!("  ........................................................");
+                println!("........................................................");
+                println!();
             }
         }
     });
@@ -109,16 +115,22 @@ pub async fn await_any_leader(dinghies: &[Dinghy]) -> u64 {
 
 pub async fn await_partition_stability(dinghies: &[Dinghy]) {
     let start = std::time::Instant::now();
+    let ids = dinghies.iter().map(|r| r.id).collect_vec();
+
+    println!("~~ awaiting stability for partition {ids:?}",);
+
     futures::future::join_all(dinghies.iter().map(|r| {
         let r = r.clone();
-        async move { r.wait(None).voter_ids(vec![2, 3, 4], "partition 0 1").await }
+        let ids = ids.clone();
+        async move { r.wait(None).voter_ids(ids, "partition 0 1").await }
     }))
     .await;
+
     println!(
-        "awaiting partition {:?} stabilized in {:?}",
-        dinghies.iter().map(|r| r.id).collect_vec(),
+        "~~ partition {ids:?} stabilized in {:?} ~~~~~~~~~~~~~~~~~~~~~~~~~~",
         start.elapsed()
     );
+
     sleep(3000).await;
 }
 

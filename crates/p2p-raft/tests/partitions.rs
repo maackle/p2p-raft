@@ -35,6 +35,7 @@ async fn shrink_and_grow() {
     rafts[leader].write_linearizable(3).await.unwrap();
     rafts[leader].write_linearizable(4).await.unwrap();
     rafts[leader].write_linearizable(5).await.unwrap();
+
     println!("wrote data in remaining raft.");
 
     // - heal the cluster, bringing all nodes back into the same partition

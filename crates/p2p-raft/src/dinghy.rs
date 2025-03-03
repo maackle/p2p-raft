@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, collections::BTreeSet, fmt::Debug, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, sync::Arc, time::Duration};
 
 use futures::FutureExt;
 use itertools::Itertools;
@@ -7,7 +7,6 @@ use openraft::{
     ChangeMembers, Entry, EntryPayload, Raft, RaftTypeConfig, SnapshotMeta,
     alias::ResponderReceiverOf,
     error::{ClientWriteError, InitializeError, RaftError},
-    impls::OneshotResponder,
     raft::ClientWriteResult,
 };
 use tokio::{sync::Mutex, task::JoinHandle};
@@ -221,8 +220,6 @@ impl<C: TypeConf> Dinghy<C> {
                         })
                         .await
                         .unwrap();
-
-                    println!("{source}: {is_leader} {is_voter}");
 
                     if is_leader || is_voter {
                         continue;

@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use memstore::TypeConfig;
 use openraft::error::Unreachable;
-use tokio::sync::Mutex;
+use tracing_mutex::parkinglot::Mutex;
 
 use crate::Dinghy;
 use crate::RESPONSIVE_INTERVAL;
@@ -44,7 +44,7 @@ impl<C: TypeConf> Router<C> {
         &mut self,
         partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,
     ) {
-        self.0.lock().await.create_partitions(partitions);
+        self.0.lock().create_partitions(partitions);
     }
 }
 
@@ -86,7 +86,7 @@ impl<C: TypeConf> RouterConnections<C> {
             }
         }
         println!(
-            "\n\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~ PARTITION ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n{:?}\n\n",
+            "\n\n~~~~~~~~~~~~~~~~  PARTITION {:?}  ~~~~~~~~~~~~~~~~\n\n",
             self.show_partitions()
         );
     }
@@ -130,7 +130,7 @@ impl<C: TypeConf> RouterNode<C> {
         let max = self.source.clone().max(to.clone());
 
         let delay = {
-            let r = self.router.lock().await;
+            let r = self.router.lock();
 
             if r.partitions.get(&min) != r.partitions.get(&max) {
                 if LOG_RESP {
@@ -157,8 +157,7 @@ impl<C: TypeConf> RouterNode<C> {
         tokio::time::sleep(delay).await;
 
         let res = {
-            let r = self.router.lock().await;
-            let ding = r.targets.get(&to).unwrap().clone();
+            let ding = self.router.lock().targets.get(&to).unwrap().clone();
             ding.handle_request(self.source.clone(), req).await?
         };
 
@@ -169,10 +168,13 @@ impl<C: TypeConf> RouterNode<C> {
             // println!("resp {} <- {}: {:?}", self.source, to, res);
         }
 
-        let d = {
-            let r = self.router.lock().await;
-            r.targets.get(&self.source).unwrap().clone()
-        };
+        let d = self
+            .router
+            .lock()
+            .targets
+            .get(&self.source)
+            .unwrap()
+            .clone();
 
         // println!("touching {} <- {}", self.source, to);
 
