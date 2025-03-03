@@ -1,17 +1,22 @@
 use std::{borrow::Borrow, collections::BTreeSet, fmt::Debug, sync::Arc};
 
 use futures::FutureExt;
+use itertools::Itertools;
 use memstore::StateMachineStore;
 use openraft::{
-    Entry, EntryPayload, Raft, RaftTypeConfig, SnapshotMeta, StorageError,
+    ChangeMembers, Entry, EntryPayload, Raft, RaftTypeConfig, SnapshotMeta, StorageError,
     alias::ResponderReceiverOf,
-    error::{InitializeError, RaftError},
+    error::{ClientWriteError, InitializeError, RaftError},
+    impls::OneshotResponder,
     raft::ClientWriteResult,
     storage::RaftStateMachine,
 };
 use tokio::sync::Mutex;
 
-use crate::peer_tracker::PeerTracker;
+use crate::{
+    message::{RaftRequest, RaftResponse},
+    peer_tracker::PeerTracker,
+};
 
 #[derive(Clone, derive_more::From, derive_more::Deref)]
 pub struct Dinghy<C: RaftTypeConfig> {
@@ -94,6 +99,70 @@ impl<C: RaftTypeConfig> Dinghy<C> {
         self.ensure_linearizable().await?;
         self.raft.client_write(data).await?;
         Ok(())
+    }
+
+    pub async fn handle_request(
+        &self,
+        from: C::NodeId,
+        req: RaftRequest<C>,
+    ) -> Result<RaftResponse<C>, openraft::error::Unreachable>
+    where
+        C: RaftTypeConfig<Responder = OneshotResponder<C>>,
+        C::SnapshotData: Debug,
+        C::R: Debug,
+    {
+        let from2 = from.clone();
+        let from_current_voter = self
+            .raft
+            .with_raft_state(move |s| s.membership_state.committed().voter_ids().contains(&from2))
+            .await
+            .unwrap();
+
+        // Let's be all-inclusive and include anyone who's talking to me as a voter in this raft.
+        let i_am_leader = self.current_leader().await.as_ref() == Some(&self.id);
+        if i_am_leader && !from_current_voter {
+            let res = self
+                .change_membership(ChangeMembers::AddVoterIds([from.clone()].into()), true)
+                .await;
+            dbg!(&res);
+            match res {
+                Err(RaftError::APIError(ClientWriteError::ForwardToLeader(_))) => {
+                    // OK, we're not a leader, but the leader will take care of it.
+                }
+                Err(RaftError::APIError(ClientWriteError::ChangeMembershipError(
+                    openraft::error::ChangeMembershipError::InProgress(_),
+                ))) => {
+                    // OK, we're working on it!
+                }
+                Err(e) => {
+                    // This is a legit problem!
+                    println!("*** add voter error: {e:?}");
+                    return Err(openraft::error::Unreachable::new(&e));
+                }
+                Ok(_) => {
+                    println!("*** added voter {from} to this raft");
+                    // good!
+                }
+            };
+        }
+
+        Ok(match req {
+            RaftRequest::Append(req) => self
+                .append_entries(req)
+                .await
+                .map_err(|e| openraft::error::Unreachable::new(&e))?
+                .into(),
+            RaftRequest::Snapshot { vote, snapshot } => self
+                .install_full_snapshot(vote, snapshot)
+                .await
+                .map_err(|e| openraft::error::Unreachable::new(&e))?
+                .into(),
+            RaftRequest::Vote(req) => self
+                .vote(req)
+                .await
+                .map_err(|e| openraft::error::Unreachable::new(&e))?
+                .into(),
+        })
     }
 }
 

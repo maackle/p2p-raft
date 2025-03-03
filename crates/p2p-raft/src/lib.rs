@@ -2,6 +2,7 @@ mod dinghy;
 mod peer_tracker;
 mod types;
 
+pub mod message;
 #[cfg(feature = "testing")]
 pub mod testing;
 

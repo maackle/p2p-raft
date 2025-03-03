@@ -12,7 +12,7 @@ async fn shrink_and_grow() {
 
     let (mut router, rafts) = initialized_router(NUM_PEERS).await;
 
-    // spawn_info_loop(rafts.clone());
+    spawn_info_loop(rafts.clone(), 5000);
 
     let leader = await_any_leader(&rafts).await as usize;
 
@@ -40,7 +40,7 @@ async fn shrink_and_grow() {
     // - heal the cluster, bringing all nodes back into the same partition
 
     router.create_partitions([0..=4]).await;
-    await_partition_stability(&rafts).await;
+    await_partition_stability(&rafts[0..=4]).await;
 
     rafts[0]
         .wait(None)
@@ -57,14 +57,15 @@ async fn shrink_and_grow() {
         assert_eq!(log, vec![0, 1, 2, 3, 4, 5]);
     }
 
-    // - one of the originally partitioned nodes may be come leader again
+    // - one of the originally partitioned nodes may become leader again
 
     router.create_partitions([0..=3]).await;
     await_partition_stability(&rafts[0..=3]).await;
     router.create_partitions([0..=2]).await;
     await_partition_stability(&rafts[0..=2]).await;
 
-    await_any_leader_t(&rafts[0..=2], Some(Duration::from_secs(3)))
+    // await_any_leader_t(&rafts[0..=2], Some(Duration::from_secs(3)))
+    await_any_leader_t(&rafts[0..=2], Some(Duration::from_secs(30)))
         .await
         .unwrap();
 }

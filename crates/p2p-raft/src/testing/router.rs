@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::time::Duration;
@@ -18,9 +19,8 @@ use tokio::sync::oneshot;
 
 use crate::Dinghy;
 use crate::RESPONSIVE_INTERVAL;
-
-use super::RaftRequest;
-use super::RaftResponse;
+use crate::message::RaftRequest;
+use crate::message::RaftResponse;
 
 /// Simulate a network router.
 #[derive(Clone)]
@@ -127,10 +127,14 @@ where
         &self,
         to: C::NodeId,
         req: RaftRequest<C>,
-    ) -> Result<RaftResponse<C>, Unreachable> {
-        const LOG: bool = false;
+    ) -> Result<RaftResponse<C>, Unreachable>
+    where
+        C::R: Debug,
+    {
+        const LOG_REQ: bool = true;
+        const LOG_RESP: bool = false;
 
-        if LOG {
+        if LOG_REQ {
             // println!("req: {} -> {}: {:?}", self.source, to, &req);
             println!("req: {} -> {}", self.source, to);
         }
@@ -142,7 +146,7 @@ where
             let r = self.router.lock().await;
 
             if r.partitions.get(&min) != r.partitions.get(&max) {
-                if LOG {
+                if LOG_RESP {
                     println!("dropped.");
                 }
 
@@ -168,28 +172,12 @@ where
         let res: RaftResponse<C> = {
             let r = self.router.lock().await;
             let ding = r.targets.get(&to).unwrap().clone();
-            match req {
-                RaftRequest::Append(req) => ding
-                    .append_entries(req)
-                    .await
-                    .map_err(|e| Unreachable::new(&e))?
-                    .into(),
-                RaftRequest::Snapshot { vote, snapshot } => ding
-                    .install_full_snapshot(vote, snapshot)
-                    .await
-                    .map_err(|e| Unreachable::new(&e))?
-                    .into(),
-                RaftRequest::Vote(req) => ding
-                    .vote(req)
-                    .await
-                    .map_err(|e| Unreachable::new(&e))?
-                    .into(),
-            }
+            ding.handle_request(self.source.clone(), req).await?
         };
 
         tokio::time::sleep(delay).await;
 
-        if LOG {
+        if LOG_RESP {
             println!("resp {} <- {}", self.source, to);
             // println!("resp {} <- {}: {:?}", self.source, to, res);
         }

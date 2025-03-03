@@ -23,10 +23,8 @@ pub async fn initialized_router(num_peers: u64) -> (Router<memstore::TypeConfig>
     (router, rafts)
 }
 
-pub fn spawn_info_loop(mut rafts: Vec<Dinghy>) {
+pub fn spawn_info_loop(mut rafts: Vec<Dinghy>, poll_interval_ms: u64) {
     tokio::spawn({
-        const POLL_INTERVAL: Duration = Duration::from_millis(1000);
-
         async move {
             loop {
                 for r in rafts.iter_mut() {
@@ -60,7 +58,7 @@ pub fn spawn_info_loop(mut rafts: Vec<Dinghy>) {
                     );
                 }
                 println!("  ........................................................");
-                sleep(POLL_INTERVAL.as_millis() as u64).await;
+                sleep(poll_interval_ms).await;
             }
         }
     });
@@ -119,7 +117,7 @@ pub async fn await_partition_stability(dinghies: &[Dinghy]) {
         dinghies.iter().map(|r| r.id).collect_vec(),
         start.elapsed()
     );
-    sleep(50).await;
+    sleep(3000).await;
 }
 
 pub async fn sleep(ms: u64) {
