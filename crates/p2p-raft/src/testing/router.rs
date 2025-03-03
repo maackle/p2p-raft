@@ -86,7 +86,7 @@ impl<C: TypeConf> RouterConnections<C> {
             }
         }
         println!(
-            "\n\n~~~~~~~~~~~~~~~~  PARTITION {:?}  ~~~~~~~~~~~~~~~~\n\n",
+            "\n~~~~~~~~~~~~~~~~  PARTITION {:?}  ~~~~~~~~~~~~~~~~",
             self.show_partitions()
         );
     }

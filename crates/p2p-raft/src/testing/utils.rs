@@ -102,14 +102,30 @@ pub async fn await_any_leader(dinghies: &[Dinghy]) -> u64 {
         Box::pin(async move {
             r.raft
                 .wait(None)
-                .state(ServerState::Leader, "await_state")
+                .state(ServerState::Leader, "await leader")
                 .await
         })
     });
 
     let (res, _idx, _) = futures::future::select_all(futs).await;
     let leader = res.unwrap().id;
-    println!("found new leader {leader} in {:?}", start.elapsed());
+    let election_time = start.elapsed();
+
+    futures::future::join_all(dinghies.iter().map(|r| async move {
+        if r.id != leader {
+            r.wait(None)
+                .current_leader(leader, "await consensus")
+                .await
+                .unwrap();
+        }
+    }))
+    .await;
+    let consensus_time = start.elapsed();
+
+    println!(
+        "elected new leader {leader} in {:?}, full consensus in {:?}",
+        election_time, consensus_time
+    );
     leader
 }
 
@@ -122,16 +138,17 @@ pub async fn await_partition_stability(dinghies: &[Dinghy]) {
     futures::future::join_all(dinghies.iter().map(|r| {
         let r = r.clone();
         let ids = ids.clone();
-        async move { r.wait(None).voter_ids(ids, "partition 0 1").await }
+        async move { r.wait(None).voter_ids(ids, "partition stability").await }
     }))
     .await;
 
     println!(
-        "~~ partition {ids:?} stabilized in {:?} ~~~~~~~~~~~~~~~~~~~~~~~~~~",
+        "~~ partition {ids:?} stabilized in {:?} ~~~~~~~~~~~~~~~~~~~~~~",
         start.elapsed()
     );
 
-    sleep(3000).await;
+    // somehow this little sleep is needed
+    sleep(100).await;
 }
 
 pub async fn sleep(ms: u64) {

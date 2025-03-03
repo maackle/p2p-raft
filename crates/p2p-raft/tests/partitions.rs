@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use p2p_raft::{RESPONSIVE_INTERVAL, testing::*};
+use p2p_raft::testing::*;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn shrink_and_grow() {
+async fn shrink_and_grow_and_shrink() {
     // tracing_subscriber::fmt::fmt()
     //     .with_max_level(tracing::Level::ERROR)
     //     .init();
@@ -12,7 +12,7 @@ async fn shrink_and_grow() {
 
     let (mut router, rafts) = initialized_router(NUM_PEERS).await;
 
-    spawn_info_loop(rafts.clone(), 5000);
+    // spawn_info_loop(rafts.clone(), 5000);
 
     let leader = await_any_leader(&rafts).await as usize;
 
@@ -30,12 +30,10 @@ async fn shrink_and_grow() {
     await_partition_stability(&rafts[3..]).await;
 
     let leader = await_any_leader(&rafts[3..]).await as usize;
-    sleep(100).await;
 
     rafts[leader].write_linearizable(3).await.unwrap();
     rafts[leader].write_linearizable(4).await.unwrap();
     rafts[leader].write_linearizable(5).await.unwrap();
-
     println!("wrote data in remaining raft.");
 
     // - heal the cluster, bringing all nodes back into the same partition
