@@ -66,6 +66,28 @@ pub fn spawn_info_loop(mut rafts: Vec<Dinghy>) {
     });
 }
 
+pub async fn await_any_leader_t(
+    dinghies: &[Dinghy],
+    timeout: Option<Duration>,
+) -> anyhow::Result<u64> {
+    let start = std::time::Instant::now();
+    let ids = dinghies.iter().map(|r| r.id).collect_vec();
+    println!("awaiting any leader for {ids:?}");
+    let futs = dinghies.iter().map(|r| {
+        Box::pin(async move {
+            r.raft
+                .wait(timeout)
+                .state(ServerState::Leader, "await_state")
+                .await
+        })
+    });
+
+    let (res, _idx, _) = futures::future::select_all(futs).await;
+    let leader = res?.id;
+    println!("found new leader {leader} in {:?}", start.elapsed());
+    Ok(leader)
+}
+
 pub async fn await_any_leader(dinghies: &[Dinghy]) -> u64 {
     let start = std::time::Instant::now();
     let ids = dinghies.iter().map(|r| r.id).collect_vec();
