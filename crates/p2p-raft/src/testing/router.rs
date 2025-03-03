@@ -1,14 +1,13 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 
 use memstore::TypeConfig;
 use openraft::error::Unreachable;
-use tracing_mutex::parkinglot::Mutex;
+use parking_lot::Mutex;
 
 use crate::Dinghy;
 use crate::RESPONSIVE_INTERVAL;

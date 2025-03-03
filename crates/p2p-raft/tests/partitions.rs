@@ -12,7 +12,7 @@ async fn shrink_and_grow_and_shrink() {
 
     let (mut router, rafts) = initialized_router(NUM_PEERS).await;
 
-    spawn_info_loop(rafts.clone(), 1000);
+    // spawn_info_loop(rafts.clone(), 1000);
 
     let leader = await_any_leader(&rafts).await as usize;
 
