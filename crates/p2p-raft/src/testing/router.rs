@@ -5,22 +5,16 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::time::Duration;
-use std::time::Instant;
 
 use memstore::TypeConfig;
-use openraft::RPCTypes;
-use openraft::Raft;
 use openraft::RaftTypeConfig;
-use openraft::error::RaftError;
-use openraft::error::Timeout;
 use openraft::error::Unreachable;
 use tokio::sync::Mutex;
-use tokio::sync::oneshot;
 
 use crate::Dinghy;
 use crate::RESPONSIVE_INTERVAL;
-use crate::message::RaftRequest;
-use crate::message::RaftResponse;
+use crate::message::RpcRequest;
+use crate::message::RpcResponse;
 
 /// Simulate a network router.
 #[derive(Clone)]
@@ -123,11 +117,11 @@ where
     C: RaftTypeConfig<Responder = openraft::impls::OneshotResponder<C>>,
 {
     /// Send raft request `Req` to target node `to`, and wait for response `Result<Resp, RaftError<E>>`.
-    pub async fn raft_request(
+    pub async fn rpc_request(
         &self,
         to: C::NodeId,
-        req: RaftRequest<C>,
-    ) -> Result<RaftResponse<C>, Unreachable>
+        req: RpcRequest<C>,
+    ) -> Result<RpcResponse<C>, Unreachable>
     where
         C::R: Debug,
     {
@@ -169,7 +163,7 @@ where
 
         tokio::time::sleep(delay).await;
 
-        let res: RaftResponse<C> = {
+        let res = {
             let r = self.router.lock().await;
             let ding = r.targets.get(&to).unwrap().clone();
             ding.handle_request(self.source.clone(), req).await?

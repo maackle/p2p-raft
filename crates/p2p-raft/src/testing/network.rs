@@ -49,10 +49,10 @@ impl RaftNetworkV2<TypeConfig> for Connection<TypeConfig> {
     ) -> Result<AppendEntriesResponse<TypeConfig>, RPCError<TypeConfig>> {
         match self
             .router
-            .raft_request(self.target, RaftRequest::Append(req))
+            .rpc_request(self.target, RaftRequest::Append(req).into())
             .await
         {
-            Ok(resp) => Ok(resp.unwrap_append()),
+            Ok(resp) => Ok(resp.unwrap_raft().unwrap_append()),
             Err(e) => {
                 tracing::error!("{e:?}");
                 Err(e.into())
@@ -70,10 +70,10 @@ impl RaftNetworkV2<TypeConfig> for Connection<TypeConfig> {
     ) -> Result<SnapshotResponse<TypeConfig>, StreamingError<TypeConfig>> {
         match self
             .router
-            .raft_request(self.target, RaftRequest::Snapshot { vote, snapshot })
+            .rpc_request(self.target, RaftRequest::Snapshot { vote, snapshot }.into())
             .await
         {
-            Ok(resp) => Ok(resp.unwrap_snapshot()),
+            Ok(resp) => Ok(resp.unwrap_raft().unwrap_snapshot()),
             Err(e) => {
                 tracing::error!("{e:?}");
                 Err(e.into())
@@ -88,10 +88,10 @@ impl RaftNetworkV2<TypeConfig> for Connection<TypeConfig> {
     ) -> Result<VoteResponse<TypeConfig>, RPCError<TypeConfig>> {
         match self
             .router
-            .raft_request(self.target, RaftRequest::Vote(req))
+            .rpc_request(self.target, RaftRequest::Vote(req).into())
             .await
         {
-            Ok(resp) => Ok(resp.unwrap_vote()),
+            Ok(resp) => Ok(resp.unwrap_raft().unwrap_vote()),
             Err(e) => {
                 tracing::error!("{e:?}");
                 Err(e.into())

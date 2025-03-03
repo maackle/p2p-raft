@@ -14,7 +14,7 @@ use openraft::{
 use tokio::sync::Mutex;
 
 use crate::{
-    message::{RaftRequest, RaftResponse},
+    message::{P2pRequest, RaftRequest, RaftResponse, RpcRequest, RpcResponse},
     peer_tracker::PeerTracker,
 };
 
@@ -104,13 +104,66 @@ impl<C: RaftTypeConfig> Dinghy<C> {
     pub async fn handle_request(
         &self,
         from: C::NodeId,
-        req: RaftRequest<C>,
+        req: RpcRequest<C>,
+    ) -> Result<RpcResponse<C>, openraft::error::Unreachable>
+    where
+        C: RaftTypeConfig<Responder = OneshotResponder<C>>,
+        C::SnapshotData: Debug,
+        C::R: Debug,
+    {
+        // TODO: handle errors?
+        let res = match req {
+            RpcRequest::P2p(p2p_req) => {
+                self.handle_p2p_request(from, p2p_req).await?;
+                RpcResponse::Ok
+            }
+            RpcRequest::Raft(raft_req) => {
+                RpcResponse::Raft(self.handle_raft_request(from, raft_req).await?)
+            }
+        };
+        Ok(res)
+    }
+
+    async fn handle_raft_request(
+        &self,
+        _from: C::NodeId,
+        raft_req: RaftRequest<C>,
     ) -> Result<RaftResponse<C>, openraft::error::Unreachable>
     where
         C: RaftTypeConfig<Responder = OneshotResponder<C>>,
         C::SnapshotData: Debug,
         C::R: Debug,
     {
+        Ok(match raft_req {
+            RaftRequest::Append(req) => self
+                .append_entries(req)
+                .await
+                .map_err(|e| openraft::error::Unreachable::new(&e))?
+                .into(),
+            RaftRequest::Snapshot { vote, snapshot } => self
+                .install_full_snapshot(vote, snapshot)
+                .await
+                .map_err(|e| openraft::error::Unreachable::new(&e))?
+                .into(),
+            RaftRequest::Vote(req) => self
+                .vote(req)
+                .await
+                .map_err(|e| openraft::error::Unreachable::new(&e))?
+                .into(),
+        })
+    }
+
+    async fn handle_p2p_request(
+        &self,
+        from: C::NodeId,
+        req: P2pRequest,
+    ) -> Result<(), openraft::error::Unreachable>
+    where
+        C: RaftTypeConfig<Responder = OneshotResponder<C>>,
+        C::SnapshotData: Debug,
+        C::R: Debug,
+    {
+        let i_am_leader = self.current_leader().await.as_ref() == Some(&self.id);
         let from2 = from.clone();
         let from_current_voter = self
             .raft
@@ -118,13 +171,18 @@ impl<C: RaftTypeConfig> Dinghy<C> {
             .await
             .unwrap();
 
-        // Let's be all-inclusive and include anyone who's talking to me as a voter in this raft.
-        let i_am_leader = self.current_leader().await.as_ref() == Some(&self.id);
         if i_am_leader && !from_current_voter {
-            let res = self
-                .change_membership(ChangeMembers::AddVoterIds([from.clone()].into()), true)
-                .await;
-            dbg!(&res);
+            let res = match req {
+                P2pRequest::Join => {
+                    self.change_membership(ChangeMembers::AddVoterIds([from.clone()].into()), true)
+                        .await
+                }
+                P2pRequest::Leave => {
+                    self.change_membership(ChangeMembers::RemoveVoters([from.clone()].into()), true)
+                        .await
+                }
+            };
+
             match res {
                 Err(RaftError::APIError(ClientWriteError::ForwardToLeader(_))) => {
                     // OK, we're not a leader, but the leader will take care of it.
@@ -145,24 +203,7 @@ impl<C: RaftTypeConfig> Dinghy<C> {
                 }
             };
         }
-
-        Ok(match req {
-            RaftRequest::Append(req) => self
-                .append_entries(req)
-                .await
-                .map_err(|e| openraft::error::Unreachable::new(&e))?
-                .into(),
-            RaftRequest::Snapshot { vote, snapshot } => self
-                .install_full_snapshot(vote, snapshot)
-                .await
-                .map_err(|e| openraft::error::Unreachable::new(&e))?
-                .into(),
-            RaftRequest::Vote(req) => self
-                .vote(req)
-                .await
-                .map_err(|e| openraft::error::Unreachable::new(&e))?
-                .into(),
-        })
+        Ok(())
     }
 }
 
