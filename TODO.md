@@ -1,3 +1,0 @@
-- set up partitions in a raft cluster
-- maybe an easier way to start up a cluster
-- also need ways to add new nodes later

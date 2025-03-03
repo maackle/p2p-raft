@@ -8,8 +8,8 @@ use p2p_raft::{RESPONSIVE_INTERVAL, testing::*};
 
 const PARTITION_DELAY: u64 = RESPONSIVE_INTERVAL.as_millis() as u64 * 3;
 
-#[tokio::main(flavor = "multi_thread")]
-async fn main() {
+#[tokio::test(flavor = "multi_thread")]
+async fn shrink_and_grow() {
     // tracing_subscriber::fmt::fmt()
     //     .with_max_level(tracing::Level::ERROR)
     //     .init();
@@ -36,7 +36,7 @@ async fn main() {
     // rafts[0].write_linearizable(5).await.unwrap();
     // println!("wrote data in old raft.");
 
-    let leader = await_single_leader(&rafts[3..], Some(leader as u64)).await as usize;
+    let leader = await_single_leader(&rafts[3..], None).await as usize;
 
     rafts[leader].write_linearizable(3).await.unwrap();
     rafts[leader].write_linearizable(4).await.unwrap();

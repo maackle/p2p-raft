@@ -1,5 +1,6 @@
 use std::{collections::BTreeSet, time::Duration};
 
+use itertools::Itertools;
 use maplit::btreeset;
 
 use super::*;
@@ -64,8 +65,7 @@ pub fn spawn_info_loop(mut rafts: Vec<Dinghy>) {
     });
 }
 
-pub async fn await_leaders(dinghies: &[Dinghy], previous: Option<BTreeSet<u64>>) -> BTreeSet<u64> {
-    let start = std::time::Instant::now();
+async fn await_leaders(dinghies: &[Dinghy], previous: Option<BTreeSet<u64>>) -> BTreeSet<u64> {
     loop {
         let mut leaders = BTreeSet::new();
         for dinghy in dinghies.iter() {
@@ -87,11 +87,18 @@ pub async fn await_leaders(dinghies: &[Dinghy], previous: Option<BTreeSet<u64>>)
 }
 
 pub async fn await_single_leader(rafts: &[Dinghy], previous: Option<u64>) -> u64 {
+    let start = std::time::Instant::now();
+    let ids = rafts.iter().map(|r| r.id).collect_vec();
+    if let Some(previous) = previous {
+        println!("awaiting single leader != {previous} for {ids:?}");
+    } else {
+        println!("awaiting single leader for {ids:?}");
+    }
     loop {
         let leaders = await_leaders(rafts, previous.map(|p| btreeset![p])).await;
         if leaders.len() == 1 {
             let leader = leaders.into_iter().next().unwrap();
-            println!("new leader: {leader}");
+            println!("found new leader {leader} in {:?}", start.elapsed());
             return leader;
         } else if leaders.len() > 1 {
             println!("multiple leaders: {leaders:?}");
