@@ -25,8 +25,10 @@ pub async fn initialized_router(num_peers: u64) -> (Router<memstore::TypeConfig>
 
 pub fn spawn_info_loop(mut rafts: Vec<Dinghy>, poll_interval_ms: u64) {
     tokio::spawn({
+        let mut interval = tokio::time::interval(Duration::from_millis(poll_interval_ms));
         async move {
             loop {
+                interval.tick().await;
                 for r in rafts.iter_mut() {
                     let t = r.tracker.lock().await;
                     let peers = t.responsive_peers(crate::RESPONSIVE_INTERVAL);
@@ -58,7 +60,6 @@ pub fn spawn_info_loop(mut rafts: Vec<Dinghy>, poll_interval_ms: u64) {
                     );
                 }
                 println!("  ........................................................");
-                sleep(poll_interval_ms).await;
             }
         }
     });

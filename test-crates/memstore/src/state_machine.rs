@@ -17,15 +17,6 @@ pub enum Request {
     Set { key: String, value: String },
 }
 
-impl Request {
-    pub fn set(key: impl ToString, value: impl ToString) -> Self {
-        Self::Set {
-            key: key.to_string(),
-            value: value.to_string(),
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Response {
     pub value: Option<String>,

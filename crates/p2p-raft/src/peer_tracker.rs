@@ -10,7 +10,7 @@ use openraft::{
 };
 use tokio::{sync::Mutex, time::Instant};
 
-use crate::Dinghy;
+use crate::{Dinghy, network::P2pNetwork};
 
 pub struct PeerTracker<C: RaftTypeConfig> {
     last_seen: BTreeMap<C::NodeId, Instant>,

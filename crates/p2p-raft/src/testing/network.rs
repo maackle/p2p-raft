@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::future::Future;
 use std::time::Duration;
 
@@ -13,6 +14,7 @@ use openraft::error::RPCError;
 use openraft::error::ReplicationClosed;
 use openraft::error::StreamingError;
 use openraft::error::Timeout;
+use openraft::impls::OneshotResponder;
 use openraft::network::RPCOption;
 use openraft::network::v2::RaftNetworkV2;
 use openraft::raft::AppendEntriesRequest;
@@ -21,8 +23,11 @@ use openraft::raft::SnapshotResponse;
 use openraft::raft::VoteRequest;
 use openraft::raft::VoteResponse;
 
+use crate::message::P2pRequest;
 use crate::message::RaftRequest;
+use crate::network::P2pNetwork;
 
+use super::Router;
 use super::router::RouterNode;
 
 pub struct Connection<C: RaftTypeConfig> {
@@ -41,6 +46,26 @@ impl RaftNetworkFactory<TypeConfig> for RouterNode<TypeConfig> {
     }
 }
 
+impl<C: RaftTypeConfig> P2pNetwork<C> for Router<C>
+where
+    C: RaftTypeConfig<Responder = OneshotResponder<C>>,
+    C::SnapshotData: Debug,
+    C::R: Debug,
+{
+    fn send(
+        &self,
+        source: C::NodeId,
+        target: C::NodeId,
+        req: P2pRequest,
+    ) -> impl Future<Output = anyhow::Result<()>> {
+        async move {
+            let r = self.lock().await;
+            let tgt = r.targets.get(&target).unwrap();
+            tgt.handle_p2p_request(source, req).await?;
+            Ok(())
+        }
+    }
+}
 impl RaftNetworkV2<TypeConfig> for Connection<TypeConfig> {
     async fn append_entries(
         &mut self,

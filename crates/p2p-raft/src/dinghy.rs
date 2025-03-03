@@ -1,53 +1,56 @@
-use std::{borrow::Borrow, collections::BTreeSet, fmt::Debug, sync::Arc};
+use std::{borrow::Borrow, collections::BTreeSet, fmt::Debug, sync::Arc, time::Duration};
 
 use futures::FutureExt;
 use itertools::Itertools;
 use memstore::StateMachineStore;
 use openraft::{
-    ChangeMembers, Entry, EntryPayload, Raft, RaftTypeConfig, SnapshotMeta, StorageError,
+    ChangeMembers, Entry, EntryPayload, Raft, RaftTypeConfig, SnapshotMeta,
     alias::ResponderReceiverOf,
     error::{ClientWriteError, InitializeError, RaftError},
     impls::OneshotResponder,
     raft::ClientWriteResult,
-    storage::RaftStateMachine,
 };
 use tokio::sync::Mutex;
 
 use crate::{
     message::{P2pRequest, RaftRequest, RaftResponse, RpcRequest, RpcResponse},
+    network::P2pNetwork,
     peer_tracker::PeerTracker,
+    testing::Router,
 };
 
+const CHORE_INTERVAL: Duration = Duration::from_secs(1000);
+
 #[derive(Clone, derive_more::From, derive_more::Deref)]
-pub struct Dinghy<C: RaftTypeConfig> {
+pub struct Dinghy<C: RaftTypeConfig, N: P2pNetwork<C> = Router<C>> {
     #[deref]
     pub raft: Raft<C>,
+
     pub id: C::NodeId,
     pub store: memstore::LogStore<C>,
     pub tracker: Arc<Mutex<PeerTracker<C>>>,
+    pub network: N,
 }
 
 impl<C: RaftTypeConfig> Dinghy<C> {
-    pub fn new(id: C::NodeId, raft: Raft<C>, store: memstore::LogStore<C>) -> Self {
+    pub fn new<N: P2pNetwork<C> + Send + Sync + 'static>(
+        id: C::NodeId,
+        raft: Raft<C>,
+        store: memstore::LogStore<C>,
+        network: N,
+    ) -> Self {
         Self {
             id,
             raft,
             store,
             tracker: PeerTracker::new(),
+            network,
         }
     }
 
-    // pub fn id(&self) -> C::NodeId
-    // where
-    //     C: RaftTypeConfig<AsyncRuntime = openraft::TokioRuntime>,
-    // {
-    //     self.raft.metrics().borrow().id.clone()
-    // }
-
-    // pub async fn is_leader(&self) -> bool {
-    //     #[allow(deprecated)]
-    //     self.raft.is_leader().await.is_ok()
-    // }
+    pub async fn is_leader(&self) -> bool {
+        self.current_leader().await.as_ref() == Some(&self.id)
+    }
 
     pub async fn initialize(
         &self,
@@ -153,7 +156,7 @@ impl<C: RaftTypeConfig> Dinghy<C> {
         })
     }
 
-    async fn handle_p2p_request(
+    pub async fn handle_p2p_request(
         &self,
         from: C::NodeId,
         req: P2pRequest,
@@ -204,6 +207,15 @@ impl<C: RaftTypeConfig> Dinghy<C> {
             };
         }
         Ok(())
+    }
+
+    pub async fn spawn_chore_loop(&self) {
+        let mut interval = tokio::time::interval(CHORE_INTERVAL);
+        loop {
+            interval.tick().await;
+            todo!()
+            // self.network.send(self.id, P2pRequest::Ping).await?;
+        }
     }
 }
 

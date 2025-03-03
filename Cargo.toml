@@ -1,11 +1,6 @@
 
 [workspace]
-members = [
-  "crates/p2p-raft",
-  "crates/partitioner",
-  "test-crates/memstore",
-  # "test-crates/network-impl",
-]
+members = ["crates/p2p-raft", "test-crates/memstore"]
 
 resolver = "3"
 
