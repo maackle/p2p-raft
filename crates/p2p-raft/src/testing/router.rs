@@ -40,6 +40,12 @@ impl<C: RaftTypeConfig> Router<C> {
     //     }
     // }
 
+    /// Create partitions in the network specified by a list of lists of node ids.
+    ///
+    /// Each list in the list represents a new partition which the specified nodes
+    /// will be moved into. Nodes which are not specified in any list will remain
+    /// in their current partition, which will be separate from any other partitions
+    /// created by this function call.
     pub async fn create_partitions(
         &mut self,
         partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,
@@ -91,6 +97,10 @@ impl<C: RaftTypeConfig> RouterConnections<C> {
         );
     }
 
+    /// Show the current partitions in the network.
+    ///
+    /// The output of this function, if fed into `create_partitions`,
+    /// will recreate the current network state.
     pub fn show_partitions(&self) -> BTreeSet<BTreeSet<C::NodeId>> {
         let mut partitions = BTreeMap::new();
         let mut all = self.targets.keys().cloned().collect::<BTreeSet<_>>();
