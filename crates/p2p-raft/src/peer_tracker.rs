@@ -5,18 +5,18 @@ use std::{
 };
 
 use openraft::{
-    ChangeMembers, Raft, RaftTypeConfig,
+    ChangeMembers,
     error::{ClientWriteError, RaftError},
 };
 use tokio::{sync::Mutex, time::Instant};
 
-use crate::{Dinghy, network::P2pNetwork};
+use crate::{Dinghy, TypeConf, network::P2pNetwork};
 
-pub struct PeerTracker<C: RaftTypeConfig> {
+pub struct PeerTracker<C: TypeConf> {
     last_seen: BTreeMap<C::NodeId, Instant>,
 }
 
-impl<C: RaftTypeConfig> PeerTracker<C> {
+impl<C: TypeConf> PeerTracker<C> {
     pub fn new() -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             last_seen: Default::default(),
@@ -27,10 +27,7 @@ impl<C: RaftTypeConfig> PeerTracker<C> {
         self.last_seen.insert(node.clone(), Instant::now());
     }
 
-    pub async fn handle_absentees(&mut self, raft: &Dinghy<C>, interval: Duration)
-    where
-        C: RaftTypeConfig<Responder = openraft::impls::OneshotResponder<C>>,
-    {
+    pub async fn handle_absentees(&mut self, raft: &Dinghy<C>, interval: Duration) {
         let unresponsive = self.unresponsive_members(raft, interval).await;
         if !unresponsive.is_empty() {
             if let Err(e) = raft

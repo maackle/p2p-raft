@@ -7,26 +7,26 @@ use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 
 use memstore::TypeConfig;
-use openraft::RaftTypeConfig;
 use openraft::error::Unreachable;
 use tokio::sync::Mutex;
 
 use crate::Dinghy;
 use crate::RESPONSIVE_INTERVAL;
+use crate::TypeConf;
 use crate::message::RpcRequest;
 use crate::message::RpcResponse;
 
 /// Simulate a network router.
 #[derive(Clone)]
-pub struct RouterNode<C: RaftTypeConfig> {
+pub struct RouterNode<C: TypeConf> {
     pub source: C::NodeId,
     pub router: Router<C>,
 }
 
 #[derive(Default, Clone, derive_more::Deref)]
-pub struct Router<C: RaftTypeConfig>(Arc<Mutex<RouterConnections<C>>>);
+pub struct Router<C: TypeConf>(Arc<Mutex<RouterConnections<C>>>);
 
-impl<C: RaftTypeConfig> Router<C> {
+impl<C: TypeConf> Router<C> {
     // pub fn node(&self, id: C::NodeId) -> RouterNode<C> {
     //     RouterNode {
     //         source: id,
@@ -64,7 +64,7 @@ impl Router<TypeConfig> {
 }
 
 #[derive(Clone, Default)]
-pub struct RouterConnections<C: RaftTypeConfig> {
+pub struct RouterConnections<C: TypeConf> {
     pub targets: BTreeMap<C::NodeId, Dinghy<C>>,
     pub latency: HashMap<(C::NodeId, C::NodeId), u64>,
     pub partitions: BTreeMap<C::NodeId, PartitionId>,
@@ -74,7 +74,7 @@ pub type PartitionId = u64;
 
 static PARTITION_ID: AtomicU64 = AtomicU64::new(1);
 
-impl<C: RaftTypeConfig> RouterConnections<C> {
+impl<C: TypeConf> RouterConnections<C> {
     pub fn create_partitions(
         &mut self,
         partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,
@@ -111,21 +111,14 @@ impl<C: RaftTypeConfig> RouterConnections<C> {
     }
 }
 
-impl<C: RaftTypeConfig> RouterNode<C>
-where
-    C::SnapshotData: std::fmt::Debug,
-    C: RaftTypeConfig<Responder = openraft::impls::OneshotResponder<C>>,
-{
+impl<C: TypeConf> RouterNode<C> {
     /// Send raft request `Req` to target node `to`, and wait for response `Result<Resp, RaftError<E>>`.
     pub async fn rpc_request(
         &self,
         to: C::NodeId,
         req: RpcRequest<C>,
-    ) -> Result<RpcResponse<C>, Unreachable>
-    where
-        C::R: Debug,
-    {
-        const LOG_REQ: bool = true;
+    ) -> Result<RpcResponse<C>, Unreachable> {
+        const LOG_REQ: bool = false;
         const LOG_RESP: bool = false;
 
         if LOG_REQ {

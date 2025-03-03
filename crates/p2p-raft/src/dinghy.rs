@@ -10,19 +10,20 @@ use openraft::{
     impls::OneshotResponder,
     raft::ClientWriteResult,
 };
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
+    TypeConf,
     message::{P2pRequest, RaftRequest, RaftResponse, RpcRequest, RpcResponse},
     network::P2pNetwork,
     peer_tracker::PeerTracker,
     testing::Router,
 };
 
-const CHORE_INTERVAL: Duration = Duration::from_secs(1000);
+const CHORE_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Clone, derive_more::From, derive_more::Deref)]
-pub struct Dinghy<C: RaftTypeConfig, N: P2pNetwork<C> = Router<C>> {
+pub struct Dinghy<C: TypeConf, N: P2pNetwork<C> = Router<C>> {
     #[deref]
     pub raft: Raft<C>,
 
@@ -32,12 +33,13 @@ pub struct Dinghy<C: RaftTypeConfig, N: P2pNetwork<C> = Router<C>> {
     pub network: N,
 }
 
-impl<C: RaftTypeConfig> Dinghy<C> {
-    pub fn new<N: P2pNetwork<C> + Send + Sync + 'static>(
+impl<C: TypeConf> Dinghy<C> {
+    pub fn new(
         id: C::NodeId,
         raft: Raft<C>,
         store: memstore::LogStore<C>,
-        network: N,
+        // TODO: generic
+        network: Router<C>,
     ) -> Self {
         Self {
             id,
@@ -73,7 +75,7 @@ impl<C: RaftTypeConfig> Dinghy<C> {
 
     pub async fn read_log_data(&self) -> anyhow::Result<Vec<C::D>>
     where
-        C: RaftTypeConfig<Entry = Entry<C>>,
+        C: TypeConf<Entry = Entry<C>>,
         C::Entry: Clone,
     {
         use openraft::RaftLogReader;
@@ -108,12 +110,7 @@ impl<C: RaftTypeConfig> Dinghy<C> {
         &self,
         from: C::NodeId,
         req: RpcRequest<C>,
-    ) -> Result<RpcResponse<C>, openraft::error::Unreachable>
-    where
-        C: RaftTypeConfig<Responder = OneshotResponder<C>>,
-        C::SnapshotData: Debug,
-        C::R: Debug,
-    {
+    ) -> Result<RpcResponse<C>, openraft::error::Unreachable> {
         // TODO: handle errors?
         let res = match req {
             RpcRequest::P2p(p2p_req) => {
@@ -131,12 +128,7 @@ impl<C: RaftTypeConfig> Dinghy<C> {
         &self,
         _from: C::NodeId,
         raft_req: RaftRequest<C>,
-    ) -> Result<RaftResponse<C>, openraft::error::Unreachable>
-    where
-        C: RaftTypeConfig<Responder = OneshotResponder<C>>,
-        C::SnapshotData: Debug,
-        C::R: Debug,
-    {
+    ) -> Result<RaftResponse<C>, openraft::error::Unreachable> {
         Ok(match raft_req {
             RaftRequest::Append(req) => self
                 .append_entries(req)
@@ -160,12 +152,7 @@ impl<C: RaftTypeConfig> Dinghy<C> {
         &self,
         from: C::NodeId,
         req: P2pRequest,
-    ) -> Result<(), openraft::error::Unreachable>
-    where
-        C: RaftTypeConfig<Responder = OneshotResponder<C>>,
-        C::SnapshotData: Debug,
-        C::R: Debug,
-    {
+    ) -> Result<(), openraft::error::Unreachable> {
         let i_am_leader = self.current_leader().await.as_ref() == Some(&self.id);
         let from2 = from.clone();
         let from_current_voter = self
@@ -209,13 +196,48 @@ impl<C: RaftTypeConfig> Dinghy<C> {
         Ok(())
     }
 
-    pub async fn spawn_chore_loop(&self) {
+    pub fn spawn_chore_loop(&self) -> JoinHandle<()> {
+        let source = self.id.clone();
+        let raft = self.raft.clone();
+        let network = self.network.clone();
+
         let mut interval = tokio::time::interval(CHORE_INTERVAL);
-        loop {
-            interval.tick().await;
-            todo!()
-            // self.network.send(self.id, P2pRequest::Ping).await?;
-        }
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+        tokio::spawn(async move {
+            loop {
+                interval.tick().await;
+
+                if let Some(leader) = raft.current_leader().await {
+                    let is_leader = leader == source;
+
+                    let source2 = source.clone();
+                    let is_voter = raft
+                        .with_raft_state(move |s| {
+                            s.membership_state
+                                .committed()
+                                .voter_ids()
+                                .contains(&source2)
+                        })
+                        .await
+                        .unwrap();
+
+                    println!("{source}: {is_leader} {is_voter}");
+
+                    if is_leader || is_voter {
+                        continue;
+                    }
+
+                    // if there is a leader and I'm not a voter, ask to rejoin the cluster
+                    match network.send(source.clone(), leader, P2pRequest::Join).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            println!("failed to send join request to leader: {e:?}");
+                        }
+                    }
+                }
+            }
+        })
     }
 }
 

@@ -1,7 +1,7 @@
-use crate::message::*;
+use crate::{TypeConf, message::*};
 use openraft::RaftTypeConfig;
 
-pub trait P2pNetwork<C: RaftTypeConfig> {
+pub trait P2pNetwork<C: TypeConf> {
     fn send(
         &self,
         source: C::NodeId,

@@ -16,6 +16,7 @@ pub async fn initialized_router(num_peers: u64) -> (Router<memstore::TypeConfig>
     println!("router created.");
 
     for (_, raft) in rafts.iter().enumerate() {
+        let _ = raft.spawn_chore_loop();
         raft.initialize(all_ids.clone()).await.unwrap();
         println!("initialized {}.", raft.id);
     }

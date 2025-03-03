@@ -23,6 +23,7 @@ use openraft::raft::SnapshotResponse;
 use openraft::raft::VoteRequest;
 use openraft::raft::VoteResponse;
 
+use crate::TypeConf;
 use crate::message::P2pRequest;
 use crate::message::RaftRequest;
 use crate::network::P2pNetwork;
@@ -30,7 +31,7 @@ use crate::network::P2pNetwork;
 use super::Router;
 use super::router::RouterNode;
 
-pub struct Connection<C: RaftTypeConfig> {
+pub struct Connection<C: TypeConf> {
     router: RouterNode<C>,
     target: C::NodeId,
 }
@@ -46,12 +47,7 @@ impl RaftNetworkFactory<TypeConfig> for RouterNode<TypeConfig> {
     }
 }
 
-impl<C: RaftTypeConfig> P2pNetwork<C> for Router<C>
-where
-    C: RaftTypeConfig<Responder = OneshotResponder<C>>,
-    C::SnapshotData: Debug,
-    C::R: Debug,
-{
+impl<C: TypeConf> P2pNetwork<C> for Router<C> {
     fn send(
         &self,
         source: C::NodeId,
@@ -59,9 +55,12 @@ where
         req: P2pRequest,
     ) -> impl Future<Output = anyhow::Result<()>> {
         async move {
+            dbg!(&source);
             let r = self.lock().await;
+            dbg!(&source);
             let tgt = r.targets.get(&target).unwrap();
-            tgt.handle_p2p_request(source, req).await?;
+            tgt.handle_p2p_request(source.clone(), req).await?;
+            dbg!(&source);
             Ok(())
         }
     }
