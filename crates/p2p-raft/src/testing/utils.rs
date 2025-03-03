@@ -85,6 +85,21 @@ pub async fn await_any_leader(dinghies: &[Dinghy]) -> u64 {
     leader
 }
 
+pub async fn await_partition_stability(dinghies: &[Dinghy]) {
+    let start = std::time::Instant::now();
+    futures::future::join_all(dinghies.iter().map(|r| {
+        let r = r.clone();
+        async move { r.wait(None).voter_ids(vec![2, 3, 4], "partition 0 1").await }
+    }))
+    .await;
+    println!(
+        "awaiting partition {:?} stabilized in {:?}",
+        dinghies.iter().map(|r| r.id).collect_vec(),
+        start.elapsed()
+    );
+    sleep(50).await;
+}
+
 pub async fn sleep(ms: u64) {
     tokio::time::sleep(Duration::from_millis(ms)).await;
 }

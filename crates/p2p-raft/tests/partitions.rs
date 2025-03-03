@@ -1,13 +1,4 @@
-use futures::{FutureExt, future::join_all};
-use itertools::Itertools;
-use maplit::btreeset;
-use memstore::{StateMachineStore, TypeConfig};
-use openraft::{EntryPayload, Snapshot, SnapshotMeta, Vote};
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
-
 use p2p_raft::{RESPONSIVE_INTERVAL, testing::*};
-
-const PARTITION_DELAY: u64 = RESPONSIVE_INTERVAL.as_millis() as u64 * 3;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn shrink_and_grow() {
@@ -18,7 +9,8 @@ async fn shrink_and_grow() {
     const NUM_PEERS: u64 = 5;
 
     let (mut router, rafts) = initialized_router(NUM_PEERS).await;
-    spawn_info_loop(rafts.clone());
+
+    // spawn_info_loop(rafts.clone());
 
     let leader = await_any_leader(&rafts).await as usize;
 
@@ -29,21 +21,11 @@ async fn shrink_and_grow() {
 
     // - now gradually whittle down the cluster until only 2 nodes are left
 
-    router.create_partitions(vec![vec![0, 1]]).await;
+    router.create_partitions([vec![0, 1], vec![2, 3, 4]]).await;
+    await_partition_stability(&rafts[2..]).await;
 
-    join_all(rafts[3..].iter().map(|r| {
-        let r = r.clone();
-        async move { r.wait(None).voter_ids(vec![2, 3, 4], "partition 0 1").await }
-    }))
-    .await;
-
-    router.create_partitions(vec![vec![2]]).await;
-
-    join_all(rafts[3..].iter().map(|r| {
-        let r = r.clone();
-        async move { r.wait(None).voter_ids(vec![3, 4], "partition 0 1").await }
-    }))
-    .await;
+    router.create_partitions([vec![2], vec![3, 4]]).await;
+    await_partition_stability(&rafts[3..]).await;
 
     let leader = await_any_leader(&rafts[3..]).await as usize;
     sleep(100).await;
@@ -56,6 +38,7 @@ async fn shrink_and_grow() {
     // - heal the cluster, bringing all nodes back into the same partition
 
     router.create_partitions(vec![vec![0, 1, 2, 3, 4]]).await;
+    await_partition_stability(&rafts).await;
 
     rafts[0]
         .wait(None)
