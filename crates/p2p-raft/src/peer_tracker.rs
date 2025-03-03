@@ -28,34 +28,31 @@ impl<C: TypeConf> PeerTracker<C> {
     }
 
     pub async fn handle_absentees(&mut self, raft: &Dinghy<C>, interval: Duration) {
+        // TODO: don't skip!
+        // return;
         let unresponsive = self.unresponsive_members(raft, interval).await;
-        if !unresponsive.is_empty() {
-            if let Err(e) = raft
+        if !unresponsive.is_empty() && raft.is_leader().await {
+            match raft
                 .change_membership(ChangeMembers::RemoveVoters(unresponsive.clone()), true)
                 .await
             {
-                match e {
-                    RaftError::APIError(ClientWriteError::ChangeMembershipError(
-                        openraft::error::ChangeMembershipError::InProgress(_),
-                    )) => {}
-                    RaftError::APIError(ClientWriteError::ForwardToLeader(_)) => {}
-                    // RaftError::APIError(ClientWriteError::ChangeMembershipError(
-                    //     openraft::error::ChangeMembershipError::EmptyMembership(_),
-                    // )) => {}
-                    // RaftError::APIError(ClientWriteError::ChangeMembershipError(
-                    //     openraft::error::ChangeMembershipError::LearnerNotFound(_),
-                    // )) => {}
-                    _ => {
-                        println!("ERROR: Failed to remove absentees: {}, {e:?}", raft.id);
+                Ok(_)
+                | Err(RaftError::APIError(ClientWriteError::ChangeMembershipError(
+                    openraft::error::ChangeMembershipError::InProgress(_),
+                ))) => {
+                    println!("*** removing absentees: {:?}", unresponsive);
+                    // XXX: this hack ensures that we only attempt removing nodes once per PRESENCE_WINDOW.
+                    //      if they are removed by the next time the interval expires, they won't show up
+                    //      in the next unresponsive set.
+                    for p in unresponsive.iter() {
+                        self.touch(p);
                     }
                 }
-            } else {
-                println!("MEMBERSHIP CHANGED, removed {:?}", unresponsive);
-                // XXX: this hack ensures that we only attempt removing nodes once per PRESENCE_WINDOW.
-                //      if they are removed by the next time the interval expires, they won't show up
-                //      in the next unresponsive set.
-                for p in unresponsive.iter() {
-                    self.touch(p);
+                Err(RaftError::APIError(ClientWriteError::ForwardToLeader(_))) => {
+                    // minor race condition, it's ok
+                }
+                e => {
+                    println!("*** ERROR: Failed to remove absentees: {}, {e:?}", raft.id);
                 }
             }
         }

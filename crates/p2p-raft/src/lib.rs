@@ -19,7 +19,7 @@ pub const ELECTION_TIMEOUT_MAX: Duration = Duration::from_millis(3000);
 
 /// If we haven't seen a message from a peer in this long, we consider them unresponsive.
 /// The leader will immediately downgrade a node from voter to learner at this time.
-pub const RESPONSIVE_INTERVAL: Duration = Duration::from_millis(2_000);
+pub const RESPONSIVE_INTERVAL: Duration = Duration::from_millis(2000);
 
 // XXX: wowzers this is ugly. We want a blanked impl to impose more trait bounds on RaftTypeConfig,
 // we we don't need them on every function. I couldn't get it to work so I did this for now.
