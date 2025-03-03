@@ -1,4 +1,5 @@
-use futures::FutureExt;
+use futures::{FutureExt, future::join_all};
+use itertools::Itertools;
 use maplit::btreeset;
 use memstore::{StateMachineStore, TypeConfig};
 use openraft::{EntryPayload, Snapshot, SnapshotMeta, Vote};
@@ -19,7 +20,7 @@ async fn shrink_and_grow() {
     let (mut router, rafts) = initialized_router(NUM_PEERS).await;
     spawn_info_loop(rafts.clone());
 
-    let leader = await_single_leader(&rafts, None).await as usize;
+    let leader = await_any_leader(&rafts).await as usize;
 
     rafts[leader].write_linearizable(0).await.unwrap();
     rafts[leader].write_linearizable(1).await.unwrap();
@@ -29,11 +30,23 @@ async fn shrink_and_grow() {
     // - now gradually whittle down the cluster until only 2 nodes are left
 
     router.create_partitions(vec![vec![0, 1]]).await;
-    sleep(PARTITION_DELAY).await;
-    router.create_partitions(vec![vec![2]]).await;
-    sleep(PARTITION_DELAY).await;
 
-    let leader = await_single_leader(&rafts[3..], None).await as usize;
+    join_all(rafts[3..].iter().map(|r| {
+        let r = r.clone();
+        async move { r.wait(None).voter_ids(vec![2, 3, 4], "partition 0 1").await }
+    }))
+    .await;
+
+    router.create_partitions(vec![vec![2]]).await;
+
+    join_all(rafts[3..].iter().map(|r| {
+        let r = r.clone();
+        async move { r.wait(None).voter_ids(vec![3, 4], "partition 0 1").await }
+    }))
+    .await;
+
+    let leader = await_any_leader(&rafts[3..]).await as usize;
+    sleep(100).await;
 
     rafts[leader].write_linearizable(3).await.unwrap();
     rafts[leader].write_linearizable(4).await.unwrap();
@@ -44,7 +57,11 @@ async fn shrink_and_grow() {
 
     router.create_partitions(vec![vec![0, 1, 2, 3, 4]]).await;
 
-    sleep(PARTITION_DELAY).await;
+    rafts[0]
+        .wait(None)
+        .current_leader(leader as u64, "heal")
+        .await
+        .unwrap();
 
     // TODO: re-add original nodes as voters when they are responsive again.
 

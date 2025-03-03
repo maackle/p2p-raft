@@ -2,6 +2,7 @@ use std::{collections::BTreeSet, time::Duration};
 
 use itertools::Itertools;
 use maplit::btreeset;
+use openraft::ServerState;
 
 use super::*;
 
@@ -65,46 +66,23 @@ pub fn spawn_info_loop(mut rafts: Vec<Dinghy>) {
     });
 }
 
-async fn await_leaders(dinghies: &[Dinghy], previous: Option<BTreeSet<u64>>) -> BTreeSet<u64> {
-    loop {
-        let mut leaders = BTreeSet::new();
-        for dinghy in dinghies.iter() {
-            if let Some(leader) = dinghy.current_leader().await {
-                leaders.insert(leader);
-            } else {
-                sleep(250).await;
-                continue;
-            }
-        }
-        if let Some(previous) = previous.as_ref() {
-            if leaders == *previous {
-                sleep(250).await;
-                continue;
-            }
-        }
-        return leaders;
-    }
-}
-
-pub async fn await_single_leader(rafts: &[Dinghy], previous: Option<u64>) -> u64 {
+pub async fn await_any_leader(dinghies: &[Dinghy]) -> u64 {
     let start = std::time::Instant::now();
-    let ids = rafts.iter().map(|r| r.id).collect_vec();
-    if let Some(previous) = previous {
-        println!("awaiting single leader != {previous} for {ids:?}");
-    } else {
-        println!("awaiting single leader for {ids:?}");
-    }
-    loop {
-        let leaders = await_leaders(rafts, previous.map(|p| btreeset![p])).await;
-        if leaders.len() == 1 {
-            let leader = leaders.into_iter().next().unwrap();
-            println!("found new leader {leader} in {:?}", start.elapsed());
-            return leader;
-        } else if leaders.len() > 1 {
-            println!("multiple leaders: {leaders:?}");
-        }
-        sleep(250).await;
-    }
+    let ids = dinghies.iter().map(|r| r.id).collect_vec();
+    println!("awaiting any leader for {ids:?}");
+    let futs = dinghies.iter().map(|r| {
+        Box::pin(async move {
+            r.raft
+                .wait(None)
+                .state(ServerState::Leader, "await_state")
+                .await
+        })
+    });
+
+    let (res, _idx, _) = futures::future::select_all(futs).await;
+    let leader = res.unwrap().id;
+    println!("found new leader {leader} in {:?}", start.elapsed());
+    leader
 }
 
 pub async fn sleep(ms: u64) {

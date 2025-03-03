@@ -5,7 +5,7 @@ async fn test_snapshot() {
     let (mut _router, rafts) = initialized_router(5).await;
     spawn_info_loop(rafts.clone());
 
-    let leader = await_single_leader(&rafts, None).await as usize;
+    let leader = await_any_leader(&rafts).await as usize;
 
     rafts[leader].write_linearizable(0).await.unwrap();
     rafts[leader].write_linearizable(1).await.unwrap();
