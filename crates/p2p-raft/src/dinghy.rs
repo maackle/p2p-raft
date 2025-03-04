@@ -1,11 +1,10 @@
 use std::{collections::BTreeSet, future::Future, sync::Arc, time::Duration};
 
 use futures::FutureExt;
-use itertools::Itertools;
 use memstore::StateMachineStore;
 use openraft::{
     alias::ResponderReceiverOf,
-    error::{ClientWriteError, InitializeError, RaftError},
+    error::{ClientWriteError, InitializeError, RaftError, Unreachable},
     raft::ClientWriteResult,
     ChangeMembers, Entry, EntryPayload, Raft, RaftTypeConfig, SnapshotMeta,
 };
@@ -51,6 +50,19 @@ impl<C: TypeConf> Dinghy<C> {
 
     pub async fn is_leader(&self) -> bool {
         self.current_leader().await.as_ref() == Some(&self.id)
+    }
+
+    pub async fn is_voter(&self, id: &C::NodeId) -> Result<bool, openraft::error::Fatal<C>> {
+        let id = id.clone();
+        self.raft
+            .with_raft_state(move |s| {
+                s.membership_state
+                    .committed()
+                    .voter_ids()
+                    .find(|n| *n == id)
+                    .is_some()
+            })
+            .await
     }
 
     pub async fn initialize(
@@ -153,12 +165,10 @@ impl<C: TypeConf> Dinghy<C> {
         req: P2pRequest,
     ) -> Result<(), openraft::error::Unreachable> {
         let i_am_leader = self.current_leader().await.as_ref() == Some(&self.id);
-        let from2 = from.clone();
         let from_current_voter = self
-            .raft
-            .with_raft_state(move |s| s.membership_state.committed().voter_ids().contains(&from2))
+            .is_voter(&from)
             .await
-            .unwrap();
+            .map_err(|e| Unreachable::new(&e))?;
 
         if i_am_leader && !from_current_voter {
             let res = match req {
@@ -197,8 +207,7 @@ impl<C: TypeConf> Dinghy<C> {
 
     pub fn spawn_chore_loop(&self) -> JoinHandle<()> {
         let source = self.id.clone();
-        let raft = self.raft.clone();
-        let network = self.network.clone();
+        let dinghy = self.clone();
 
         let mut interval = tokio::time::interval(CHORE_INTERVAL);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -207,26 +216,25 @@ impl<C: TypeConf> Dinghy<C> {
             loop {
                 interval.tick().await;
 
-                if let Some(leader) = raft.current_leader().await {
+                if let Some(leader) = dinghy.current_leader().await {
                     let is_leader = leader == source;
 
-                    let source2 = source.clone();
-                    let is_voter = raft
-                        .with_raft_state(move |s| {
-                            s.membership_state
-                                .committed()
-                                .voter_ids()
-                                .contains(&source2)
-                        })
-                        .await
-                        .unwrap();
+                    let is_voter = if let Ok(l) = dinghy.is_voter(&source).await {
+                        l
+                    } else {
+                        continue;
+                    };
 
                     if is_leader || is_voter {
                         continue;
                     }
 
                     // if there is a leader and I'm not a voter, ask to rejoin the cluster
-                    match network.send(source.clone(), leader, P2pRequest::Join).await {
+                    match dinghy
+                        .network
+                        .send(source.clone(), leader, P2pRequest::Join)
+                        .await
+                    {
                         Ok(_) => {}
                         Err(e) => {
                             println!("failed to send join request to leader: {e:?}");
