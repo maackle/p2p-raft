@@ -245,7 +245,7 @@ impl Dinghy<memstore::TypeConfig> {
     ///      and the merged snapshot is forced by the leader.
     #[deprecated = "this does not work!"]
     pub async fn replace_snapshot(&self, data: Vec<memstore::Request>) {
-        use openraft::storage::{RaftSnapshotBuilder, RaftStateMachine};
+        use openraft::storage::RaftStateMachine;
 
         let smd = {
             let mut sm = self

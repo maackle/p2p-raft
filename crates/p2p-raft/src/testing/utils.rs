@@ -1,7 +1,6 @@
 use std::{collections::BTreeSet, time::Duration};
 
 use itertools::Itertools;
-use maplit::btreeset;
 use openraft::ServerState;
 
 use super::*;
@@ -24,6 +23,7 @@ pub async fn initialized_router(num_peers: u64) -> (Router<memstore::TypeConfig>
     (router, rafts)
 }
 
+#[allow(warnings)]
 pub fn spawn_info_loop(mut rafts: Vec<Dinghy>, poll_interval_ms: u64) {
     tokio::spawn({
         let mut interval = tokio::time::interval(Duration::from_millis(poll_interval_ms));
