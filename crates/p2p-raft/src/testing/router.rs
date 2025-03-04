@@ -1,31 +1,42 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
 use std::time::Duration;
 
 use memstore::TypeConfig;
 use openraft::error::Unreachable;
 use parking_lot::Mutex;
 
-use crate::Dinghy;
-use crate::RESPONSIVE_INTERVAL;
-use crate::TypeConf;
 use crate::message::RpcRequest;
 use crate::message::RpcResponse;
+use crate::Dinghy;
+use crate::TypeConf;
+use crate::RESPONSIVE_INTERVAL;
 
 /// Simulate a network router.
 #[derive(Clone)]
-pub struct RouterNode<C: TypeConf> {
+pub struct RouterNode<C: TypeConf>
+where
+    C::SnapshotData: std::fmt::Debug,
+    C::R: std::fmt::Debug,
+{
     pub source: C::NodeId,
     pub router: Router<C>,
 }
 
 #[derive(Default, Clone, derive_more::Deref)]
-pub struct Router<C: TypeConf>(Arc<Mutex<RouterConnections<C>>>);
+pub struct Router<C: TypeConf>(Arc<Mutex<RouterConnections<C>>>)
+where
+    C::SnapshotData: std::fmt::Debug,
+    C::R: std::fmt::Debug;
 
-impl<C: TypeConf> Router<C> {
+impl<C: TypeConf> Router<C>
+where
+    C::SnapshotData: std::fmt::Debug,
+    C::R: std::fmt::Debug,
+{
     // pub fn node(&self, id: C::NodeId) -> RouterNode<C> {
     //     RouterNode {
     //         source: id,
@@ -63,7 +74,11 @@ impl Router<TypeConfig> {
 }
 
 #[derive(Clone, Default)]
-pub struct RouterConnections<C: TypeConf> {
+pub struct RouterConnections<C: TypeConf>
+where
+    C::SnapshotData: std::fmt::Debug,
+    C::R: std::fmt::Debug,
+{
     pub targets: BTreeMap<C::NodeId, Dinghy<C>>,
     pub latency: HashMap<(C::NodeId, C::NodeId), u64>,
     pub partitions: BTreeMap<C::NodeId, PartitionId>,
@@ -73,7 +88,11 @@ pub type PartitionId = u64;
 
 static PARTITION_ID: AtomicU64 = AtomicU64::new(1);
 
-impl<C: TypeConf> RouterConnections<C> {
+impl<C: TypeConf> RouterConnections<C>
+where
+    C::SnapshotData: std::fmt::Debug,
+    C::R: std::fmt::Debug,
+{
     pub fn create_partitions(
         &mut self,
         partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,
@@ -110,7 +129,11 @@ impl<C: TypeConf> RouterConnections<C> {
     }
 }
 
-impl<C: TypeConf> RouterNode<C> {
+impl<C: TypeConf> RouterNode<C>
+where
+    C::SnapshotData: std::fmt::Debug,
+    C::R: std::fmt::Debug,
+{
     /// Send raft request `Req` to target node `to`, and wait for response `Result<Resp, RaftError<E>>`.
     pub async fn rpc_request(
         &self,

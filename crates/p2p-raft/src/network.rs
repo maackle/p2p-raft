@@ -1,8 +1,10 @@
 use std::future::Future;
 
-use crate::{message::*, TypeConf};
+use openraft::RaftTypeConfig;
 
-pub trait P2pNetwork<C: TypeConf> {
+use crate::message::*;
+
+pub trait P2pNetwork<C: RaftTypeConfig> {
     fn send(
         &self,
         source: C::NodeId,

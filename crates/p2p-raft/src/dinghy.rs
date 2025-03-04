@@ -20,8 +20,8 @@ use crate::{
 
 const CHORE_INTERVAL: Duration = Duration::from_secs(1);
 
-#[derive(Clone, derive_more::From, derive_more::Deref)]
-pub struct Dinghy<C: TypeConf, N: P2pNetwork<C> = Router<C>> {
+#[derive(Clone, derive_more::Deref)]
+pub struct Dinghy<C: RaftTypeConfig, N: P2pNetwork<C> = Router<C>> {
     #[deref]
     pub raft: Raft<C>,
 
@@ -31,7 +31,11 @@ pub struct Dinghy<C: TypeConf, N: P2pNetwork<C> = Router<C>> {
     pub network: N,
 }
 
-impl<C: TypeConf> Dinghy<C> {
+impl<C: TypeConf> Dinghy<C>
+where
+    C::SnapshotData: std::fmt::Debug,
+    C::R: std::fmt::Debug,
+{
     pub fn new(
         id: C::NodeId,
         raft: Raft<C>,

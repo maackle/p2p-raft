@@ -1,9 +1,12 @@
-use openraft::{Snapshot, raft::*};
+use openraft::{raft::*, Snapshot};
 
 use crate::TypeConf;
 
 #[derive(Debug, derive_more::From)]
-pub enum RpcRequest<C: TypeConf> {
+pub enum RpcRequest<C: TypeConf>
+where
+    C::SnapshotData: std::fmt::Debug,
+{
     Raft(RaftRequest<C>),
     P2p(P2pRequest),
 }
@@ -21,7 +24,10 @@ pub enum P2pRequest {
 }
 
 #[derive(Debug, derive_more::From)]
-pub enum RaftRequest<C: TypeConf> {
+pub enum RaftRequest<C: TypeConf>
+where
+    C::SnapshotData: std::fmt::Debug,
+{
     Append(AppendEntriesRequest<C>),
     Snapshot {
         vote: C::Vote,

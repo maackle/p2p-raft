@@ -2,30 +2,34 @@ use std::future::Future;
 
 use memstore::NodeId;
 use memstore::TypeConfig;
-use openraft::OptionalSend;
-use openraft::RaftNetworkFactory;
-use openraft::Snapshot;
-use openraft::Vote;
 use openraft::error::RPCError;
 use openraft::error::ReplicationClosed;
 use openraft::error::StreamingError;
-use openraft::network::RPCOption;
 use openraft::network::v2::RaftNetworkV2;
+use openraft::network::RPCOption;
 use openraft::raft::AppendEntriesRequest;
 use openraft::raft::AppendEntriesResponse;
 use openraft::raft::SnapshotResponse;
 use openraft::raft::VoteRequest;
 use openraft::raft::VoteResponse;
+use openraft::OptionalSend;
+use openraft::RaftNetworkFactory;
+use openraft::Snapshot;
+use openraft::Vote;
 
-use crate::TypeConf;
 use crate::message::P2pRequest;
 use crate::message::RaftRequest;
 use crate::network::P2pNetwork;
+use crate::TypeConf;
 
-use super::Router;
 use super::router::RouterNode;
+use super::Router;
 
-pub struct Connection<C: TypeConf> {
+pub struct Connection<C: TypeConf>
+where
+    C::SnapshotData: std::fmt::Debug,
+    C::R: std::fmt::Debug,
+{
     router: RouterNode<C>,
     target: C::NodeId,
 }
@@ -41,7 +45,11 @@ impl RaftNetworkFactory<TypeConfig> for RouterNode<TypeConfig> {
     }
 }
 
-impl<C: TypeConf> P2pNetwork<C> for Router<C> {
+impl<C: TypeConf> P2pNetwork<C> for Router<C>
+where
+    C::SnapshotData: std::fmt::Debug,
+    C::R: std::fmt::Debug,
+{
     fn send(
         &self,
         source: C::NodeId,
