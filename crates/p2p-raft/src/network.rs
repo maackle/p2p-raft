@@ -1,14 +1,12 @@
 use std::future::Future;
 
-use openraft::RaftTypeConfig;
+use crate::{message::*, TypeConf};
 
-use crate::message::*;
-
-pub trait P2pNetwork<C: RaftTypeConfig> {
+pub trait P2pNetwork<C: TypeConf> {
     fn send(
         &self,
         source: C::NodeId,
         target: C::NodeId,
-        req: P2pRequest,
-    ) -> impl Future<Output = anyhow::Result<()>>;
+        req: P2pRequest<C>,
+    ) -> impl Future<Output = P2pResponse<C>>;
 }

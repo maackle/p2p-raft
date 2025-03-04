@@ -8,6 +8,7 @@ resolver = "2"
 derive_more = { version = "1", features = ["full"] }
 maplit = "*"
 
+anyerror = { version = "*", features = ["anyhow"] }
 openraft = { git = "https://github.com/maackle/openraft.git", features = [
   "type-alias",
 ] }

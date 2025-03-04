@@ -5,6 +5,7 @@ use memstore::TypeConfig;
 use openraft::error::RPCError;
 use openraft::error::ReplicationClosed;
 use openraft::error::StreamingError;
+use openraft::error::Unreachable;
 use openraft::network::v2::RaftNetworkV2;
 use openraft::network::RPCOption;
 use openraft::raft::AppendEntriesRequest;
@@ -18,6 +19,7 @@ use openraft::Snapshot;
 use openraft::Vote;
 
 use crate::message::P2pRequest;
+use crate::message::P2pResponse;
 use crate::message::RaftRequest;
 use crate::network::P2pNetwork;
 use crate::TypeConf;
@@ -28,6 +30,7 @@ use super::Router;
 pub struct Connection<C: TypeConf>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
     router: RouterNode<C>,
@@ -48,20 +51,21 @@ impl RaftNetworkFactory<TypeConfig> for RouterNode<TypeConfig> {
 impl<C: TypeConf> P2pNetwork<C> for Router<C>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
     fn send(
         &self,
         source: C::NodeId,
         target: C::NodeId,
-        req: P2pRequest,
-    ) -> impl Future<Output = anyhow::Result<()>> {
+        req: P2pRequest<C>,
+    ) -> impl Future<Output = P2pResponse<C>> {
         async move {
             // dbg!(&source);
             let tgt = self.lock().targets.get(&target).unwrap().clone();
-            tgt.handle_p2p_request(source.clone(), req).await?;
-            // dbg!(&source);
-            Ok(())
+            tgt.handle_p2p_request(source.clone(), req)
+                .await
+                .expect("fatal error")
         }
     }
 }
@@ -79,7 +83,7 @@ impl RaftNetworkV2<TypeConfig> for Connection<TypeConfig> {
             Ok(resp) => Ok(resp.unwrap_raft().unwrap_append()),
             Err(e) => {
                 tracing::error!("{e:?}");
-                Err(e.into())
+                Err(RPCError::Unreachable(Unreachable::new(&e)))
             }
         }
     }
@@ -100,7 +104,7 @@ impl RaftNetworkV2<TypeConfig> for Connection<TypeConfig> {
             Ok(resp) => Ok(resp.unwrap_raft().unwrap_snapshot()),
             Err(e) => {
                 tracing::error!("{e:?}");
-                Err(e.into())
+                Err(StreamingError::Unreachable(Unreachable::new(&e)))
             }
         }
     }
@@ -118,7 +122,7 @@ impl RaftNetworkV2<TypeConfig> for Connection<TypeConfig> {
             Ok(resp) => Ok(resp.unwrap_raft().unwrap_vote()),
             Err(e) => {
                 tracing::error!("{e:?}");
-                Err(e.into())
+                Err(RPCError::Unreachable(Unreachable::new(&e)))
             }
         }
     }

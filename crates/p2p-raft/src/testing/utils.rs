@@ -54,7 +54,7 @@ pub fn spawn_info_loop(mut rafts: Vec<Dinghy>, poll_interval_ms: u64) {
                         .map(|s| s.snapshot.data);
 
                     let lines = [
-                        format!(".. "),
+                        format!("... "),
                         format!("{}", r.id),
                         format!("<{:?}>", r.current_leader().await),
                         format!("members {:?}", members),

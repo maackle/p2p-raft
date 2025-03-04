@@ -4,14 +4,16 @@ use futures::FutureExt;
 use memstore::StateMachineStore;
 use openraft::{
     alias::ResponderReceiverOf,
-    error::{ClientWriteError, InitializeError, RaftError, Unreachable},
+    error::{Fatal, InitializeError, RaftError},
     raft::ClientWriteResult,
     ChangeMembers, Entry, EntryPayload, Raft, RaftTypeConfig, SnapshotMeta,
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
-    message::{P2pRequest, RaftRequest, RaftResponse, RpcRequest, RpcResponse},
+    message::{
+        P2pError, P2pRequest, P2pResponse, RaftRequest, RaftResponse, RpcRequest, RpcResponse,
+    },
     network::P2pNetwork,
     peer_tracker::PeerTracker,
     testing::Router,
@@ -21,7 +23,7 @@ use crate::{
 const CHORE_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Clone, derive_more::Deref)]
-pub struct Dinghy<C: RaftTypeConfig, N: P2pNetwork<C> = Router<C>> {
+pub struct Dinghy<C: TypeConf, N: P2pNetwork<C> = Router<C>> {
     #[deref]
     pub raft: Raft<C>,
 
@@ -34,6 +36,8 @@ pub struct Dinghy<C: RaftTypeConfig, N: P2pNetwork<C> = Router<C>> {
 impl<C: TypeConf> Dinghy<C>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::D: std::fmt::Debug,
+    C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
     pub fn new(
@@ -125,88 +129,66 @@ where
         &self,
         from: C::NodeId,
         req: RpcRequest<C>,
-    ) -> Result<RpcResponse<C>, openraft::error::Unreachable> {
-        // TODO: handle errors?
-        let res = match req {
-            RpcRequest::P2p(p2p_req) => {
-                self.handle_p2p_request(from, p2p_req).await?;
-                RpcResponse::Ok
-            }
-            RpcRequest::Raft(raft_req) => {
-                RpcResponse::Raft(self.handle_raft_request(from, raft_req).await?)
-            }
-        };
-        Ok(res)
+    ) -> Result<RpcResponse<C>, Fatal<C>> {
+        Ok(match req {
+            RpcRequest::P2p(p2p_req) => self.handle_p2p_request(from, p2p_req).await?.into(),
+            RpcRequest::Raft(raft_req) => self.handle_raft_request(from, raft_req).await?.into(),
+        })
     }
 
     async fn handle_raft_request(
         &self,
         _from: C::NodeId,
         raft_req: RaftRequest<C>,
-    ) -> Result<RaftResponse<C>, openraft::error::Unreachable> {
-        Ok(match raft_req {
-            RaftRequest::Append(req) => self
-                .append_entries(req)
-                .await
-                .map_err(|e| openraft::error::Unreachable::new(&e))?
-                .into(),
+    ) -> Result<RaftResponse<C>, Fatal<C>> {
+        let res: RaftResponse<C> = match raft_req {
+            RaftRequest::Append(req) => match self.append_entries(req).await {
+                Ok(r) => Ok(r.into()),
+                Err(RaftError::APIError(e)) => Ok(e.into()),
+                Err(RaftError::Fatal(e)) => Err(e),
+            },
             RaftRequest::Snapshot { vote, snapshot } => self
                 .install_full_snapshot(vote, snapshot)
                 .await
-                .map_err(|e| openraft::error::Unreachable::new(&e))?
-                .into(),
-            RaftRequest::Vote(req) => self
-                .vote(req)
-                .await
-                .map_err(|e| openraft::error::Unreachable::new(&e))?
-                .into(),
-        })
+                .map(Into::into),
+            RaftRequest::Vote(req) => match self.vote(req).await {
+                Ok(r) => Ok(r.into()),
+                Err(RaftError::APIError(e)) => Ok(e.into()),
+                Err(RaftError::Fatal(e)) => Err(e),
+            },
+        }?;
+
+        Ok(res)
     }
 
     pub async fn handle_p2p_request(
         &self,
         from: C::NodeId,
-        req: P2pRequest,
-    ) -> Result<(), openraft::error::Unreachable> {
-        let i_am_leader = self.current_leader().await.as_ref() == Some(&self.id);
-        let from_current_voter = self
-            .is_voter(&from)
-            .await
-            .map_err(|e| Unreachable::new(&e))?;
+        req: P2pRequest<C>,
+    ) -> Result<P2pResponse<C>, Fatal<C>> {
+        let from_current_voter = self.is_voter(&from).await?;
 
-        if i_am_leader && !from_current_voter {
-            let res = match req {
-                P2pRequest::Join => {
-                    self.change_membership(ChangeMembers::AddVoterIds([from.clone()].into()), true)
-                        .await
+        let res = match req {
+            P2pRequest::Propose(data) => {
+                if !from_current_voter {
+                    return Ok(P2pResponse::P2pError(P2pError::NotVoter));
                 }
-                P2pRequest::Leave => {
-                    self.change_membership(ChangeMembers::RemoveVoters([from.clone()].into()), true)
-                        .await
-                }
-            };
+                self.raft.client_write(data).await
+            }
+            P2pRequest::Join => {
+                self.change_membership(ChangeMembers::AddVoterIds([from.clone()].into()), true)
+                    .await
+            }
+            P2pRequest::Leave => {
+                self.change_membership(ChangeMembers::RemoveVoters([from.clone()].into()), true)
+                    .await
+            }
+        };
 
-            match res {
-                Err(RaftError::APIError(ClientWriteError::ForwardToLeader(_))) => {
-                    // OK, we're not a leader, but the leader will take care of it.
-                }
-                Err(RaftError::APIError(ClientWriteError::ChangeMembershipError(
-                    openraft::error::ChangeMembershipError::InProgress(_),
-                ))) => {
-                    // OK, we're working on it!
-                }
-                Err(e) => {
-                    // This is a legit problem!
-                    println!("*** add voter error: {e:?}");
-                    return Err(openraft::error::Unreachable::new(&e));
-                }
-                Ok(_) => {
-                    println!("*** added voter {from} to this raft");
-                    // good!
-                }
-            };
-        }
-        Ok(())
+        Ok(match res {
+            Ok(_) => P2pResponse::Ok,
+            Err(e) => P2pResponse::RaftError(e),
+        })
     }
 
     pub fn spawn_chore_loop(&self) -> JoinHandle<()> {
@@ -239,9 +221,12 @@ where
                         .send(source.clone(), leader, P2pRequest::Join)
                         .await
                     {
-                        Ok(_) => {}
-                        Err(e) => {
+                        P2pResponse::Ok => {}
+                        P2pResponse::P2pError(e) => {
                             println!("failed to send join request to leader: {e:?}");
+                        }
+                        P2pResponse::RaftError(e) => {
+                            tracing::warn!("raft error when sending join request to leader: {e:?}");
                         }
                     }
                 }

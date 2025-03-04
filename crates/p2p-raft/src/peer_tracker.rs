@@ -19,6 +19,7 @@ pub struct PeerTracker<C: RaftTypeConfig> {
 impl<C: TypeConf> PeerTracker<C>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
     pub fn new() -> Arc<Mutex<Self>> {

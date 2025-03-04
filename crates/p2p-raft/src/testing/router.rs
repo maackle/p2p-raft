@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use memstore::TypeConfig;
-use openraft::error::Unreachable;
+use openraft::AnyError;
 use parking_lot::Mutex;
 
 use crate::message::RpcRequest;
@@ -20,6 +20,7 @@ use crate::RESPONSIVE_INTERVAL;
 pub struct RouterNode<C: TypeConf>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
     pub source: C::NodeId,
@@ -30,11 +31,13 @@ where
 pub struct Router<C: TypeConf>(Arc<Mutex<RouterConnections<C>>>)
 where
     C::SnapshotData: std::fmt::Debug,
+    C::D: std::fmt::Debug,
     C::R: std::fmt::Debug;
 
 impl<C: TypeConf> Router<C>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
     // pub fn node(&self, id: C::NodeId) -> RouterNode<C> {
@@ -77,6 +80,7 @@ impl Router<TypeConfig> {
 pub struct RouterConnections<C: TypeConf>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
     pub targets: BTreeMap<C::NodeId, Dinghy<C>>,
@@ -91,6 +95,7 @@ static PARTITION_ID: AtomicU64 = AtomicU64::new(1);
 impl<C: TypeConf> RouterConnections<C>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
     pub fn create_partitions(
@@ -132,6 +137,7 @@ where
 impl<C: TypeConf> RouterNode<C>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
     /// Send raft request `Req` to target node `to`, and wait for response `Result<Resp, RaftError<E>>`.
@@ -139,7 +145,7 @@ where
         &self,
         to: C::NodeId,
         req: RpcRequest<C>,
-    ) -> Result<RpcResponse<C>, Unreachable> {
+    ) -> Result<RpcResponse<C>, AnyError> {
         const LOG_REQ: bool = false;
         const LOG_RESP: bool = false;
 
@@ -160,19 +166,9 @@ where
                 }
 
                 // can't communicate across partitions
-                return Err(Unreachable::new(&std::io::Error::other(
-                    "simulated network partition",
-                )));
+                return Err(AnyError::error("simulated network partition"));
             }
-            // if let Some(latency) =  {
-            // } else {
-            //     return Err(Timeout {
-            //         action: RPCTypes::Vote,
-            //         id: self.source,
-            //         target: to,
-            //         timeout: Duration::from_secs(1337),
-            //     });
-            // }
+
             Duration::from_millis(r.latency.get(&(min, max)).cloned().unwrap_or(0) / 2)
         };
 
@@ -180,7 +176,9 @@ where
 
         let res = {
             let ding = self.router.lock().targets.get(&to).unwrap().clone();
-            ding.handle_request(self.source.clone(), req).await?
+            ding.handle_request(self.source.clone(), req)
+                .await
+                .map_err(|e| AnyError::new(&e))?
         };
 
         tokio::time::sleep(delay).await;
