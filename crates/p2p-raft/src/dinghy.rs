@@ -1,22 +1,22 @@
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, future::Future, sync::Arc, time::Duration};
 
 use futures::FutureExt;
 use itertools::Itertools;
 use memstore::StateMachineStore;
 use openraft::{
-    ChangeMembers, Entry, EntryPayload, Raft, RaftTypeConfig, SnapshotMeta,
     alias::ResponderReceiverOf,
     error::{ClientWriteError, InitializeError, RaftError},
     raft::ClientWriteResult,
+    ChangeMembers, Entry, EntryPayload, Raft, RaftTypeConfig, SnapshotMeta,
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
-    TypeConf,
     message::{P2pRequest, RaftRequest, RaftResponse, RpcRequest, RpcResponse},
     network::P2pNetwork,
     peer_tracker::PeerTracker,
     testing::Router,
+    TypeConf,
 };
 
 const CHORE_INTERVAL: Duration = Duration::from_secs(1);
@@ -59,9 +59,9 @@ impl<C: TypeConf> Dinghy<C> {
     ) -> Result<(), RaftError<C, InitializeError<C>>>
     where
         BTreeSet<<C as RaftTypeConfig>::NodeId>: openraft::membership::IntoNodes<
-                <C as RaftTypeConfig>::NodeId,
-                <C as RaftTypeConfig>::Node,
-            >,
+            <C as RaftTypeConfig>::NodeId,
+            <C as RaftTypeConfig>::Node,
+        >,
     {
         let ids: BTreeSet<C::NodeId> = ids.into_iter().collect::<BTreeSet<_>>();
         match self.raft.initialize(ids).await {
@@ -77,8 +77,8 @@ impl<C: TypeConf> Dinghy<C> {
         C: TypeConf<Entry = Entry<C>>,
         C::Entry: Clone,
     {
-        use openraft::RaftLogReader;
         use openraft::storage::RaftLogStorage;
+        use openraft::RaftLogReader;
 
         Ok(self
             .store

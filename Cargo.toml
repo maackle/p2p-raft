@@ -2,7 +2,7 @@
 [workspace]
 members = ["crates/p2p-raft", "test-crates/memstore"]
 
-resolver = "3"
+resolver = "2"
 
 [workspace.dependencies]
 derive_more = { version = "1", features = ["full"] }

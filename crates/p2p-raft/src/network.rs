@@ -1,5 +1,6 @@
-use crate::{TypeConf, message::*};
-use openraft::RaftTypeConfig;
+use std::future::Future;
+
+use crate::{message::*, TypeConf};
 
 pub trait P2pNetwork<C: TypeConf> {
     fn send(
