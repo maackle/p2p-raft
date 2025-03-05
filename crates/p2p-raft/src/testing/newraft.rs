@@ -1,16 +1,14 @@
-use std::sync::Arc;
-
 use openraft::*;
 
-use p2p_raft_memstore::{LogStore, NodeId, TypeConfig};
+use p2p_raft_memstore::{NodeId, TypeConfig};
 
 use crate::{
     testing::{Router, RouterNode},
     Dinghy, ELECTION_TIMEOUT_MAX, ELECTION_TIMEOUT_MIN, HEARTBEAT_INTERVAL,
 };
 
-impl Router<TypeConfig> {
-    pub async fn new_raft(&self, node_id: NodeId) -> Dinghy<TypeConfig> {
+impl Router {
+    pub async fn new_raft(&self, node_id: NodeId) -> Dinghy<TypeConfig, RouterNode> {
         // Create a configuration for the raft instance.
         let config = Config {
             // snapshot_policy: SnapshotPolicy::LogsSinceLast(0),
@@ -23,31 +21,12 @@ impl Router<TypeConfig> {
             ..Default::default()
         };
 
-        let config = Arc::new(config.validate().unwrap());
-
-        // Create a instance of where the Raft logs will be stored.
-        let log_store = LogStore::default();
-
-        // Create a instance of where the state machine data will be stored.
-        let state_machine_store = Arc::new(p2p_raft_memstore::StateMachineStore::default());
-
         let node = RouterNode {
             source: node_id,
             router: self.clone(),
         };
 
-        // Create a local raft instance.
-        let raft = openraft::Raft::new(
-            node_id,
-            config,
-            node.clone(),
-            log_store.clone(),
-            state_machine_store.clone(),
-        )
-        .await
-        .unwrap();
-
-        let dinghy = Dinghy::from_parts(node_id, raft, log_store, self.clone());
+        let dinghy = Dinghy::new_mem(node_id, config, node).await;
 
         self.lock().targets.insert(node_id, dinghy.clone());
 

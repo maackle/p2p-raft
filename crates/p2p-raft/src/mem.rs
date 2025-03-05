@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use futures::FutureExt;
-use openraft::{alias::NodeIdOf, Config, RaftNetworkFactory, SnapshotMeta};
+use openraft::{alias::NodeIdOf, SnapshotMeta};
 use p2p_raft_memstore::TypeConfig;
 
 use crate::network::P2pNetwork;
@@ -22,7 +22,7 @@ Config {
         };
 */
 
-impl<N: P2pNetwork<TypeConfig> + RaftNetworkFactory<TypeConfig>> Dinghy<TypeConfig, N> {
+impl<N: P2pNetwork<TypeConfig>> Dinghy<TypeConfig, N> {
     pub async fn new_mem(
         node_id: NodeIdOf<TypeConfig>,
         config: openraft::Config,

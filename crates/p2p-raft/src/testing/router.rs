@@ -6,26 +6,27 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use openraft::AnyError;
+use p2p_raft_memstore::NodeId;
 use p2p_raft_memstore::TypeConfig;
 use parking_lot::Mutex;
 
 use crate::message::RpcRequest;
 use crate::message::RpcResponse;
-use crate::Dinghy;
-use crate::TypeCfg;
 use crate::RESPONSIVE_INTERVAL;
+
+type Dinghy = crate::Dinghy<TypeConfig, RouterNode>;
 
 /// Simulate a network router.
 #[derive(Clone)]
-pub struct RouterNode<C: TypeCfg> {
-    pub source: C::NodeId,
-    pub router: Router<C>,
+pub struct RouterNode {
+    pub source: NodeId,
+    pub router: Router,
 }
 
 #[derive(Default, Clone, derive_more::Deref)]
-pub struct Router<C: TypeCfg>(Arc<Mutex<RouterConnections<C>>>);
+pub struct Router(Arc<Mutex<RouterConnections>>);
 
-impl<C: TypeCfg> Router<C> {
+impl Router {
     /// Create partitions in the network specified by a list of lists of node ids.
     ///
     /// Each list in the list represents a new partition which the specified nodes
@@ -34,17 +35,14 @@ impl<C: TypeCfg> Router<C> {
     /// created by this function call.
     pub async fn create_partitions(
         &mut self,
-        partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,
+        partitions: impl IntoIterator<Item = impl IntoIterator<Item = NodeId>>,
     ) {
         self.0.lock().create_partitions(partitions);
     }
 }
 
-impl Router<TypeConfig> {
-    pub async fn add_nodes(
-        &mut self,
-        nodes: impl IntoIterator<Item = u64>,
-    ) -> Vec<Dinghy<TypeConfig>> {
+impl Router {
+    pub async fn add_nodes(&mut self, nodes: impl IntoIterator<Item = u64>) -> Vec<Dinghy> {
         let mut rafts = Vec::new();
 
         for node in nodes {
@@ -56,20 +54,20 @@ impl Router<TypeConfig> {
 }
 
 #[derive(Clone, Default)]
-pub struct RouterConnections<C: TypeCfg> {
-    pub targets: BTreeMap<C::NodeId, Dinghy<C>>,
-    pub latency: HashMap<(C::NodeId, C::NodeId), u64>,
-    pub partitions: BTreeMap<C::NodeId, PartitionId>,
+pub struct RouterConnections {
+    pub targets: BTreeMap<NodeId, Dinghy>,
+    pub latency: HashMap<(NodeId, NodeId), u64>,
+    pub partitions: BTreeMap<NodeId, PartitionId>,
 }
 
 pub type PartitionId = u64;
 
 static PARTITION_ID: AtomicU64 = AtomicU64::new(1);
 
-impl<C: TypeCfg> RouterConnections<C> {
+impl RouterConnections {
     pub fn create_partitions(
         &mut self,
-        partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,
+        partitions: impl IntoIterator<Item = impl IntoIterator<Item = NodeId>>,
     ) {
         for p in partitions {
             let id = PARTITION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -87,7 +85,7 @@ impl<C: TypeCfg> RouterConnections<C> {
     ///
     /// The output of this function, if fed into `create_partitions`,
     /// will recreate the current network state.
-    pub fn show_partitions(&self) -> BTreeSet<BTreeSet<C::NodeId>> {
+    pub fn show_partitions(&self) -> BTreeSet<BTreeSet<NodeId>> {
         let mut partitions = BTreeMap::new();
         let mut all = self.targets.keys().cloned().collect::<BTreeSet<_>>();
         for (node, id) in self.partitions.iter() {
@@ -97,25 +95,19 @@ impl<C: TypeCfg> RouterConnections<C> {
                 .or_insert_with(BTreeSet::new)
                 .insert(node.clone());
         }
-        let mut partitions: BTreeSet<BTreeSet<C::NodeId>> = partitions.values().cloned().collect();
+        let mut partitions: BTreeSet<BTreeSet<NodeId>> = partitions.values().cloned().collect();
         partitions.insert(all);
         partitions
     }
 }
 
-impl<C: TypeCfg> RouterNode<C>
-where
-    C::SnapshotData: std::fmt::Debug,
-    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
-    C::D: std::fmt::Debug,
-    C::R: std::fmt::Debug,
-{
+impl RouterNode {
     /// Send raft request `Req` to target node `to`, and wait for response `Result<Resp, RaftError<E>>`.
     pub async fn rpc_request(
         &self,
-        to: C::NodeId,
-        req: RpcRequest<C>,
-    ) -> Result<RpcResponse<C>, AnyError> {
+        to: NodeId,
+        req: RpcRequest<TypeConfig>,
+    ) -> Result<RpcResponse<TypeConfig>, AnyError> {
         const LOG_REQ: bool = false;
         const LOG_RESP: bool = false;
 

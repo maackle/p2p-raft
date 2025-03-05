@@ -1,8 +1,10 @@
 use std::future::Future;
 
+use openraft::RaftNetworkFactory;
+
 use crate::{message::*, TypeCfg};
 
-pub trait P2pNetwork<C: TypeCfg>: Clone + Send + Sync + 'static {
+pub trait P2pNetwork<C: TypeCfg>: RaftNetworkFactory<C> + Clone + Send + Sync + 'static {
     fn send(
         &self,
         source: C::NodeId,

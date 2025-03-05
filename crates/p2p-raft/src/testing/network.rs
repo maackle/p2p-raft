@@ -22,24 +22,16 @@ use crate::message::P2pRequest;
 use crate::message::P2pResponse;
 use crate::message::RaftRequest;
 use crate::network::P2pNetwork;
-use crate::TypeCfg;
 
 use super::router::RouterNode;
-use super::Router;
 
-pub struct Connection<C: TypeCfg>
-where
-    C::SnapshotData: std::fmt::Debug,
-    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
-    C::D: std::fmt::Debug,
-    C::R: std::fmt::Debug,
-{
-    router: RouterNode<C>,
-    target: C::NodeId,
+pub struct Connection {
+    router: RouterNode,
+    target: NodeId,
 }
 
-impl RaftNetworkFactory<TypeConfig> for RouterNode<TypeConfig> {
-    type Network = Connection<TypeConfig>;
+impl RaftNetworkFactory<TypeConfig> for RouterNode {
+    type Network = Connection;
 
     async fn new_client(&mut self, target: NodeId, _node: &()) -> Self::Network {
         Connection {
@@ -49,29 +41,23 @@ impl RaftNetworkFactory<TypeConfig> for RouterNode<TypeConfig> {
     }
 }
 
-impl<C: TypeCfg> P2pNetwork<C> for Router<C>
-where
-    C::SnapshotData: std::fmt::Debug,
-    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
-    C::D: std::fmt::Debug,
-    C::R: std::fmt::Debug,
-{
+impl P2pNetwork<TypeConfig> for RouterNode {
     fn send(
         &self,
-        source: C::NodeId,
-        target: C::NodeId,
-        req: P2pRequest<C>,
-    ) -> impl Future<Output = P2pResponse<C>> {
+        source: NodeId,
+        target: NodeId,
+        req: P2pRequest<TypeConfig>,
+    ) -> impl Future<Output = P2pResponse<TypeConfig>> {
         async move {
             // dbg!(&source);
-            let tgt = self.lock().targets.get(&target).unwrap().clone();
+            let tgt = self.router.lock().targets.get(&target).unwrap().clone();
             tgt.handle_p2p_request(source.clone(), req)
                 .await
                 .expect("fatal error")
         }
     }
 }
-impl RaftNetworkV2<TypeConfig> for Connection<TypeConfig> {
+impl RaftNetworkV2<TypeConfig> for Connection {
     async fn append_entries(
         &mut self,
         req: AppendEntriesRequest<TypeConfig>,
