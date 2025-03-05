@@ -17,39 +17,15 @@ use crate::RESPONSIVE_INTERVAL;
 
 /// Simulate a network router.
 #[derive(Clone)]
-pub struct RouterNode<C: TypeConf>
-where
-    C::SnapshotData: std::fmt::Debug,
-    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
-    C::D: std::fmt::Debug,
-    C::R: std::fmt::Debug,
-{
+pub struct RouterNode<C: TypeConf> {
     pub source: C::NodeId,
     pub router: Router<C>,
 }
 
 #[derive(Default, Clone, derive_more::Deref)]
-pub struct Router<C: TypeConf>(Arc<Mutex<RouterConnections<C>>>)
-where
-    C::SnapshotData: std::fmt::Debug,
-    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
-    C::D: std::fmt::Debug,
-    C::R: std::fmt::Debug;
+pub struct Router<C: TypeConf>(Arc<Mutex<RouterConnections<C>>>);
 
-impl<C: TypeConf> Router<C>
-where
-    C::SnapshotData: std::fmt::Debug,
-    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
-    C::D: std::fmt::Debug,
-    C::R: std::fmt::Debug,
-{
-    // pub fn node(&self, id: C::NodeId) -> RouterNode<C> {
-    //     RouterNode {
-    //         source: id,
-    //         router: self.clone(),
-    //     }
-    // }
-
+impl<C: TypeConf> Router<C> {
     /// Create partitions in the network specified by a list of lists of node ids.
     ///
     /// Each list in the list represents a new partition which the specified nodes
@@ -80,13 +56,7 @@ impl Router<TypeConfig> {
 }
 
 #[derive(Clone, Default)]
-pub struct RouterConnections<C: TypeConf>
-where
-    C::SnapshotData: std::fmt::Debug,
-    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
-    C::D: std::fmt::Debug,
-    C::R: std::fmt::Debug,
-{
+pub struct RouterConnections<C: TypeConf> {
     pub targets: BTreeMap<C::NodeId, Dinghy<C>>,
     pub latency: HashMap<(C::NodeId, C::NodeId), u64>,
     pub partitions: BTreeMap<C::NodeId, PartitionId>,
@@ -96,13 +66,7 @@ pub type PartitionId = u64;
 
 static PARTITION_ID: AtomicU64 = AtomicU64::new(1);
 
-impl<C: TypeConf> RouterConnections<C>
-where
-    C::SnapshotData: std::fmt::Debug,
-    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
-    C::D: std::fmt::Debug,
-    C::R: std::fmt::Debug,
-{
+impl<C: TypeConf> RouterConnections<C> {
     pub fn create_partitions(
         &mut self,
         partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,

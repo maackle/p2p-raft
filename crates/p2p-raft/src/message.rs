@@ -74,10 +74,10 @@ pub enum P2pError {
 }
 
 #[derive(Debug, derive_more::From, serde::Serialize, serde::Deserialize)]
-// #[serde(bound(
-//     serialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::Serialize",
-//     deserialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::de::DeserializeOwned"
-// ))]
+#[serde(bound(
+    serialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::Serialize",
+    deserialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::de::DeserializeOwned"
+))]
 pub enum RaftRequest<C: TypeConf> {
     Append(AppendEntriesRequest<C>),
     Snapshot {

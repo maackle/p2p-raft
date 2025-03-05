@@ -6,7 +6,7 @@ use openraft::{
     alias::ResponderReceiverOf,
     error::{Fatal, InitializeError, RaftError},
     raft::ClientWriteResult,
-    ChangeMembers, Entry, EntryPayload, Raft, RaftTypeConfig, Snapshot, SnapshotMeta,
+    ChangeMembers, Entry, EntryPayload, Raft, Snapshot, SnapshotMeta,
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 
@@ -33,13 +33,7 @@ pub struct Dinghy<C: TypeConf, N: P2pNetwork<C> = Router<C>> {
     pub network: N,
 }
 
-impl<C: TypeConf> Dinghy<C>
-where
-    C::SnapshotData: std::fmt::Debug,
-    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
-    C::D: std::fmt::Debug,
-    C::R: std::fmt::Debug,
-{
+impl<C: TypeConf> Dinghy<C> {
     pub fn new(
         id: C::NodeId,
         raft: Raft<C>,
@@ -78,10 +72,7 @@ where
         ids: impl IntoIterator<Item = C::NodeId>,
     ) -> Result<(), RaftError<C, InitializeError<C>>>
     where
-        BTreeSet<<C as RaftTypeConfig>::NodeId>: openraft::membership::IntoNodes<
-            <C as RaftTypeConfig>::NodeId,
-            <C as RaftTypeConfig>::Node,
-        >,
+        BTreeSet<C::NodeId>: openraft::membership::IntoNodes<C::NodeId, C::Node>,
     {
         let ids: BTreeSet<C::NodeId> = ids.into_iter().collect::<BTreeSet<_>>();
         match self.raft.initialize(ids).await {
@@ -95,7 +86,6 @@ where
     pub async fn read_log_data(&self) -> anyhow::Result<Vec<C::D>>
     where
         C: TypeConf<Entry = Entry<C>>,
-        C::Entry: Clone,
     {
         use openraft::storage::RaftLogStorage;
         use openraft::RaftLogReader;

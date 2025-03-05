@@ -21,16 +21,28 @@ pub const ELECTION_TIMEOUT_MAX: Duration = Duration::from_millis(3000);
 /// The leader will immediately downgrade a node from voter to learner at this time.
 pub const RESPONSIVE_INTERVAL: Duration = Duration::from_millis(2000);
 
-// XXX: would be nice if these type bounds actually worked, but I can't get them to.
-//      so they are littered around all the impls.
-pub trait TypeConf: RaftTypeConfig<Responder = openraft::impls::OneshotResponder<Self>>
-// where
-//     // Self: RaftTypeConfig<Responder = openraft::impls::OneshotResponder<Self>>,
-//     // Self::SnapshotData: std::fmt::Debug,
-//     // Self::R: std::fmt::Debug,
-//     <Self as RaftTypeConfig>::SnapshotData: std::fmt::Debug,
-//     <Self as RaftTypeConfig>::R: std::fmt::Debug,
+pub trait TypeConf:
+    RaftTypeConfig<
+    D: std::fmt::Debug + Clone,
+    R: std::fmt::Debug + Clone,
+    Entry: Clone,
+    Vote: Clone,
+    LeaderId: Clone,
+    SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
+    Responder = openraft::impls::OneshotResponder<Self>,
+>
 {
 }
 
-impl<T> TypeConf for T where T: RaftTypeConfig<Responder = openraft::impls::OneshotResponder<T>> {}
+// impl<T> TypeConf for T
+// where
+//     T: RaftTypeConfig<Responder = openraft::impls::OneshotResponder<T>>,
+//     T::D: std::fmt::Debug + Clone,
+//     T::Entry: Clone,
+//     T::Vote: Clone,
+//     T::LeaderId: Clone,
+//     T::SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
+// {
+// }
+
+impl TypeConf for memstore::TypeConfig {}

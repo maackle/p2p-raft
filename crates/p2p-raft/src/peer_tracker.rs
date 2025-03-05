@@ -6,23 +6,17 @@ use std::{
 
 use openraft::{
     error::{ClientWriteError, RaftError},
-    ChangeMembers, RaftTypeConfig,
+    ChangeMembers,
 };
 use tokio::{sync::Mutex, time::Instant};
 
 use crate::{Dinghy, TypeConf};
 
-pub struct PeerTracker<C: RaftTypeConfig> {
+pub struct PeerTracker<C: TypeConf> {
     last_seen: BTreeMap<C::NodeId, Instant>,
 }
 
-impl<C: TypeConf> PeerTracker<C>
-where
-    C::SnapshotData: std::fmt::Debug,
-    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
-    C::D: std::fmt::Debug,
-    C::R: std::fmt::Debug,
-{
+impl<C: TypeConf> PeerTracker<C> {
     pub fn new() -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             last_seen: Default::default(),
