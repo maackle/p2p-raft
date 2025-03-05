@@ -1,13 +1,13 @@
 use std::{collections::BTreeSet, future::Future, sync::Arc, time::Duration};
 
 use futures::FutureExt;
-use memstore::StateMachineStore;
 use openraft::{
     alias::ResponderReceiverOf,
     error::{Fatal, InitializeError, RaftError},
     raft::ClientWriteResult,
     ChangeMembers, Entry, EntryPayload, Raft, Snapshot, SnapshotMeta,
 };
+use p2p_raft_memstore::StateMachineStore;
 use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
@@ -28,7 +28,7 @@ pub struct Dinghy<C: TypeConf, N: P2pNetwork<C> = Router<C>> {
     pub raft: Raft<C>,
 
     pub id: C::NodeId,
-    pub store: memstore::LogStore<C>,
+    pub store: p2p_raft_memstore::LogStore<C>,
     pub tracker: Arc<Mutex<PeerTracker<C>>>,
     pub network: N,
 }
@@ -37,7 +37,7 @@ impl<C: TypeConf> Dinghy<C> {
     pub fn new(
         id: C::NodeId,
         raft: Raft<C>,
-        store: memstore::LogStore<C>,
+        store: p2p_raft_memstore::LogStore<C>,
         // TODO: generic
         network: Router<C>,
     ) -> Self {
@@ -235,21 +235,23 @@ impl<C: TypeConf> Dinghy<C> {
     }
 }
 
-impl Dinghy<memstore::TypeConfig> {
+impl Dinghy<p2p_raft_memstore::TypeConfig> {
     /// NOTE: only run this as leader!
     /// XXX: really this is just a workaround for when it's not feasible to implement
     ///      merging in the state machine, when that logic needs to be in the front end
     ///      and the merged snapshot is forced by the leader.
     #[deprecated = "this does not work!"]
-    pub async fn replace_snapshot(&self, data: Vec<memstore::Request>) {
+    pub async fn replace_snapshot(&self, data: Vec<p2p_raft_memstore::Request>) {
         use openraft::storage::RaftStateMachine;
 
         let smd = {
             let mut sm = self
                 .raft
-                .with_state_machine(|s: &mut Arc<StateMachineStore<memstore::TypeConfig>>| {
-                    async move { s.state_machine.lock().unwrap().clone() }.boxed()
-                })
+                .with_state_machine(
+                    |s: &mut Arc<StateMachineStore<p2p_raft_memstore::TypeConfig>>| {
+                        async move { s.state_machine.lock().unwrap().clone() }.boxed()
+                    },
+                )
                 .await
                 .unwrap()
                 .unwrap();
@@ -278,7 +280,7 @@ impl Dinghy<memstore::TypeConfig> {
         };
 
         self.with_state_machine(
-            move |s: &mut Arc<StateMachineStore<memstore::TypeConfig>>| {
+            move |s: &mut Arc<StateMachineStore<p2p_raft_memstore::TypeConfig>>| {
                 async move {
                     s.clone()
                         .install_snapshot(&meta.clone(), snapshot)

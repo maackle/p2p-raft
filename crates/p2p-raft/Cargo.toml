@@ -21,10 +21,10 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-memstore = { workspace = true, optional = true }
+p2p-raft-memstore = { workspace = true, optional = true }
 
 [dev-dependencies]
 
 [features]
 default = ["testing"]
-testing = ["memstore"]
+testing = ["p2p-raft-memstore"]

@@ -10,8 +10,8 @@ pub mod testing;
 use std::time::Duration;
 
 pub use dinghy::Dinghy;
-pub use memstore::{LogStore, StateMachineStore};
 use openraft::RaftTypeConfig;
+pub use p2p_raft_memstore::{LogStore, StateMachineStore};
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(500);
 pub const ELECTION_TIMEOUT_MIN: Duration = Duration::from_millis(1500);
@@ -45,4 +45,4 @@ pub trait TypeConf:
 // {
 // }
 
-impl TypeConf for memstore::TypeConfig {}
+impl TypeConf for p2p_raft_memstore::TypeConfig {}

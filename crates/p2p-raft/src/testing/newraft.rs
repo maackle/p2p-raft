@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openraft::*;
 
-use memstore::{LogStore, NodeId, TypeConfig};
+use p2p_raft_memstore::{LogStore, NodeId, TypeConfig};
 
 use crate::{
     Dinghy, ELECTION_TIMEOUT_MAX, ELECTION_TIMEOUT_MIN, HEARTBEAT_INTERVAL,
@@ -29,7 +29,7 @@ impl Router<TypeConfig> {
         let log_store = LogStore::default();
 
         // Create a instance of where the state machine data will be stored.
-        let state_machine_store = Arc::new(memstore::StateMachineStore::default());
+        let state_machine_store = Arc::new(p2p_raft_memstore::StateMachineStore::default());
 
         let node = RouterNode {
             source: node_id,

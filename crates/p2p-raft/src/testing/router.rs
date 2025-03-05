@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
 
-use memstore::TypeConfig;
+use p2p_raft_memstore::TypeConfig;
 use openraft::AnyError;
 use parking_lot::Mutex;
 

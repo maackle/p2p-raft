@@ -1,12 +1,24 @@
 
 [workspace]
-members = ["crates/p2p-raft", "test-crates/memstore"]
+members = ["crates/p2p-raft", "crates/p2p-raft-memstore"]
 
 resolver = "2"
 
 [workspace.dependencies]
+
+anyhow = "*"
 derive_more = { version = "1", features = ["full"] }
+futures = "*"
+itertools = "*"
 maplit = "*"
+nanoid = "*"
+parking_lot = "*"
+rand = { version = "0.9" }
+serde = "*"
+tokio = { version = "1.0", features = ["full"] }
+tracing = "*"
+tracing-mutex = { version = "*", features = ["parkinglot"] }
+tracing-subscriber = "*"
 
 anyerror = { version = "*", features = ["anyhow"] }
 openraft = { git = "https://github.com/maackle/openraft.git", features = [
@@ -15,16 +27,4 @@ openraft = { git = "https://github.com/maackle/openraft.git", features = [
 openraft-macros = { git = "https://github.com/maackle/openraft.git" }
 openraft-memstore = { git = "https://github.com/maackle/openraft.git" }
 
-anyhow = "*"
-futures = "*"
-itertools = "*"
-memstore = { path = "test-crates/memstore" }
-nanoid = "*"
-network-impl = { path = "test-crates/network-impl" }
-parking_lot = "*"
-rand = { version = "0.9" }
-serde = "*"
-tokio = { version = "1.0", features = ["full"] }
-tracing = "*"
-tracing-mutex = { version = "*", features = ["parkinglot"] }
-tracing-subscriber = "*"
+p2p-raft-memstore = { path = "crates/p2p-raft-memstore" }

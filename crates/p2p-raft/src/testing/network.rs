@@ -1,7 +1,7 @@
 use std::future::Future;
 
-use memstore::NodeId;
-use memstore::TypeConfig;
+use p2p_raft_memstore::NodeId;
+use p2p_raft_memstore::TypeConfig;
 use openraft::error::RPCError;
 use openraft::error::ReplicationClosed;
 use openraft::error::StreamingError;
