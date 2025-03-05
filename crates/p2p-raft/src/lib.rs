@@ -23,11 +23,11 @@ pub const RESPONSIVE_INTERVAL: Duration = Duration::from_millis(2000);
 
 pub trait TypeConf:
     RaftTypeConfig<
-    D: std::fmt::Debug + Clone,
-    R: std::fmt::Debug + Clone,
-    Entry: Clone,
-    Vote: Clone,
-    LeaderId: Clone,
+    D: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
+    R: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
+    Entry: Clone + serde::Serialize + serde::de::DeserializeOwned,
+    Vote: Clone + serde::Serialize + serde::de::DeserializeOwned,
+    LeaderId: Clone + serde::Serialize + serde::de::DeserializeOwned,
     SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
     Responder = openraft::impls::OneshotResponder<Self>,
 >

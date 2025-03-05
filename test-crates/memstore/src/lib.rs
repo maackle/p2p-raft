@@ -10,6 +10,7 @@ pub use state_machine::StateMachineStore;
 
 openraft::declare_raft_types!(
     /// Declare the type configuration for example K/V store.
+    #[derive(serde::Serialize, serde::Deserialize)]
     pub TypeConfig:
         D = Request,
         R = Response,
