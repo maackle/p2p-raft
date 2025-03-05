@@ -10,13 +10,13 @@ use openraft::{
 };
 use tokio::{sync::Mutex, time::Instant};
 
-use crate::{Dinghy, TypeConf};
+use crate::{network::P2pNetwork, Dinghy, TypeCfg};
 
-pub struct PeerTracker<C: TypeConf> {
+pub struct PeerTracker<C: TypeCfg> {
     last_seen: BTreeMap<C::NodeId, Instant>,
 }
 
-impl<C: TypeConf> PeerTracker<C> {
+impl<C: TypeCfg> PeerTracker<C> {
     pub fn new() -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             last_seen: Default::default(),
@@ -27,7 +27,11 @@ impl<C: TypeConf> PeerTracker<C> {
         self.last_seen.insert(node.clone(), Instant::now());
     }
 
-    pub async fn handle_absentees(&mut self, raft: &Dinghy<C>, interval: Duration) {
+    pub async fn handle_absentees<N: P2pNetwork<C>>(
+        &mut self,
+        raft: &Dinghy<C, N>,
+        interval: Duration,
+    ) {
         // TODO: don't skip!
         // return;
         let unresponsive = self.unresponsive_members(raft, interval).await;
@@ -68,9 +72,9 @@ impl<C: TypeConf> PeerTracker<C> {
             .collect()
     }
 
-    async fn unresponsive_members(
+    async fn unresponsive_members<N: P2pNetwork<C>>(
         &self,
-        raft: &Dinghy<C>,
+        raft: &Dinghy<C, N>,
         interval: Duration,
     ) -> BTreeSet<C::NodeId> {
         let here = self.responsive_peers(interval);

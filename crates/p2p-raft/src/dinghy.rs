@@ -1,13 +1,11 @@
 use std::{collections::BTreeSet, future::Future, sync::Arc, time::Duration};
 
-use futures::FutureExt;
 use openraft::{
     alias::ResponderReceiverOf,
     error::{Fatal, InitializeError, RaftError},
     raft::ClientWriteResult,
-    ChangeMembers, Entry, EntryPayload, Raft, Snapshot, SnapshotMeta,
+    ChangeMembers, Entry, EntryPayload, Raft, Snapshot,
 };
-use p2p_raft_memstore::StateMachineStore;
 use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{
@@ -16,14 +14,13 @@ use crate::{
     },
     network::P2pNetwork,
     peer_tracker::PeerTracker,
-    testing::Router,
-    TypeConf,
+    TypeCfg,
 };
 
 const CHORE_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Clone, derive_more::Deref)]
-pub struct Dinghy<C: TypeConf, N: P2pNetwork<C> = Router<C>> {
+pub struct Dinghy<C: TypeCfg, N: P2pNetwork<C>> {
     #[deref]
     pub raft: Raft<C>,
 
@@ -33,13 +30,12 @@ pub struct Dinghy<C: TypeConf, N: P2pNetwork<C> = Router<C>> {
     pub network: N,
 }
 
-impl<C: TypeConf> Dinghy<C> {
-    pub fn new(
+impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
+    pub fn from_parts(
         id: C::NodeId,
         raft: Raft<C>,
         store: p2p_raft_memstore::LogStore<C>,
-        // TODO: generic
-        network: Router<C>,
+        network: N,
     ) -> Self {
         Self {
             id,
@@ -85,7 +81,7 @@ impl<C: TypeConf> Dinghy<C> {
 
     pub async fn read_log_data(&self) -> anyhow::Result<Vec<C::D>>
     where
-        C: TypeConf<Entry = Entry<C>>,
+        C: TypeCfg<Entry = Entry<C>>,
     {
         use openraft::storage::RaftLogStorage;
         use openraft::RaftLogReader;
@@ -232,79 +228,5 @@ impl<C: TypeConf> Dinghy<C> {
                 }
             }
         })
-    }
-}
-
-impl Dinghy<p2p_raft_memstore::TypeConfig> {
-    /// NOTE: only run this as leader!
-    /// XXX: really this is just a workaround for when it's not feasible to implement
-    ///      merging in the state machine, when that logic needs to be in the front end
-    ///      and the merged snapshot is forced by the leader.
-    #[deprecated = "this does not work!"]
-    pub async fn replace_snapshot(&self, data: Vec<p2p_raft_memstore::Request>) {
-        use openraft::storage::RaftStateMachine;
-
-        let smd = {
-            let mut sm = self
-                .raft
-                .with_state_machine(
-                    |s: &mut Arc<StateMachineStore<p2p_raft_memstore::TypeConfig>>| {
-                        async move { s.state_machine.lock().unwrap().clone() }.boxed()
-                    },
-                )
-                .await
-                .unwrap()
-                .unwrap();
-
-            sm.data = data;
-            // sm.last_applied.map(|mut l| {
-            //     l.index += 1;
-            //     l
-            // });
-            sm
-        };
-
-        let snapshot = Box::new(smd.clone());
-
-        let snapshot_id = self
-            .raft
-            .with_raft_state(|s| s.snapshot_meta.snapshot_id.clone())
-            .await
-            .unwrap();
-
-        let meta = SnapshotMeta {
-            last_log_id: smd.last_applied,
-            last_membership: smd.last_membership,
-            snapshot_id,
-            // snapshot_id: nanoid::nanoid!(),
-        };
-
-        self.with_state_machine(
-            move |s: &mut Arc<StateMachineStore<p2p_raft_memstore::TypeConfig>>| {
-                async move {
-                    s.clone()
-                        .install_snapshot(&meta.clone(), snapshot)
-                        .await
-                        .unwrap();
-                    // s.build_snapshot().await.unwrap();
-                }
-                .boxed()
-            },
-        )
-        .await
-        .unwrap()
-        .unwrap();
-
-        let trigger = self.raft.trigger();
-        trigger
-            .purge_log(smd.last_applied.map(|l| l.index).unwrap_or_default())
-            .await
-            .unwrap();
-        trigger.snapshot().await.unwrap();
-        trigger.heartbeat().await.unwrap();
-
-        // raft.install_full_snapshot(Vote::new(term, raft.id), snapshot)
-        //     .await
-        //     .unwrap();
     }
 }

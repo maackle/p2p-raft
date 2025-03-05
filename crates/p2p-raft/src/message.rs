@@ -4,19 +4,19 @@ use openraft::{
     SnapshotMeta,
 };
 
-use crate::TypeConf;
+use crate::TypeCfg;
 
 #[derive(Debug, derive_more::From, serde::Serialize, serde::Deserialize)]
 #[serde(bound(
     serialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::Serialize",
     deserialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::de::DeserializeOwned"
 ))]
-pub enum RpcRequest<C: TypeConf> {
+pub enum RpcRequest<C: TypeCfg> {
     Raft(RaftRequest<C>),
     P2p(P2pRequest<C>),
 }
 
-impl<C: TypeConf> Clone for RpcRequest<C> {
+impl<C: TypeCfg> Clone for RpcRequest<C> {
     fn clone(&self) -> Self {
         match self {
             Self::Raft(r) => Self::Raft(r.clone()),
@@ -75,7 +75,7 @@ pub enum RaftRequest<C: RaftTypeConfig> {
     Vote(VoteRequest<C>),
 }
 
-impl<C: TypeConf> Clone for RaftRequest<C> {
+impl<C: TypeCfg> Clone for RaftRequest<C> {
     fn clone(&self) -> Self {
         match self {
             Self::Append(a) => Self::Append(a.clone()),

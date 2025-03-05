@@ -5,27 +5,27 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
 
-use p2p_raft_memstore::TypeConfig;
 use openraft::AnyError;
+use p2p_raft_memstore::TypeConfig;
 use parking_lot::Mutex;
 
 use crate::message::RpcRequest;
 use crate::message::RpcResponse;
 use crate::Dinghy;
-use crate::TypeConf;
+use crate::TypeCfg;
 use crate::RESPONSIVE_INTERVAL;
 
 /// Simulate a network router.
 #[derive(Clone)]
-pub struct RouterNode<C: TypeConf> {
+pub struct RouterNode<C: TypeCfg> {
     pub source: C::NodeId,
     pub router: Router<C>,
 }
 
 #[derive(Default, Clone, derive_more::Deref)]
-pub struct Router<C: TypeConf>(Arc<Mutex<RouterConnections<C>>>);
+pub struct Router<C: TypeCfg>(Arc<Mutex<RouterConnections<C>>>);
 
-impl<C: TypeConf> Router<C> {
+impl<C: TypeCfg> Router<C> {
     /// Create partitions in the network specified by a list of lists of node ids.
     ///
     /// Each list in the list represents a new partition which the specified nodes
@@ -56,7 +56,7 @@ impl Router<TypeConfig> {
 }
 
 #[derive(Clone, Default)]
-pub struct RouterConnections<C: TypeConf> {
+pub struct RouterConnections<C: TypeCfg> {
     pub targets: BTreeMap<C::NodeId, Dinghy<C>>,
     pub latency: HashMap<(C::NodeId, C::NodeId), u64>,
     pub partitions: BTreeMap<C::NodeId, PartitionId>,
@@ -66,7 +66,7 @@ pub type PartitionId = u64;
 
 static PARTITION_ID: AtomicU64 = AtomicU64::new(1);
 
-impl<C: TypeConf> RouterConnections<C> {
+impl<C: TypeCfg> RouterConnections<C> {
     pub fn create_partitions(
         &mut self,
         partitions: impl IntoIterator<Item = impl IntoIterator<Item = C::NodeId>>,
@@ -103,7 +103,7 @@ impl<C: TypeConf> RouterConnections<C> {
     }
 }
 
-impl<C: TypeConf> RouterNode<C>
+impl<C: TypeCfg> RouterNode<C>
 where
     C::SnapshotData: std::fmt::Debug,
     C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,

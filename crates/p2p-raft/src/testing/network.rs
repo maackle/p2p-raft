@@ -1,7 +1,5 @@
 use std::future::Future;
 
-use p2p_raft_memstore::NodeId;
-use p2p_raft_memstore::TypeConfig;
 use openraft::error::RPCError;
 use openraft::error::ReplicationClosed;
 use openraft::error::StreamingError;
@@ -17,17 +15,19 @@ use openraft::OptionalSend;
 use openraft::RaftNetworkFactory;
 use openraft::Snapshot;
 use openraft::Vote;
+use p2p_raft_memstore::NodeId;
+use p2p_raft_memstore::TypeConfig;
 
 use crate::message::P2pRequest;
 use crate::message::P2pResponse;
 use crate::message::RaftRequest;
 use crate::network::P2pNetwork;
-use crate::TypeConf;
+use crate::TypeCfg;
 
 use super::router::RouterNode;
 use super::Router;
 
-pub struct Connection<C: TypeConf>
+pub struct Connection<C: TypeCfg>
 where
     C::SnapshotData: std::fmt::Debug,
     C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
@@ -49,7 +49,7 @@ impl RaftNetworkFactory<TypeConfig> for RouterNode<TypeConfig> {
     }
 }
 
-impl<C: TypeConf> P2pNetwork<C> for Router<C>
+impl<C: TypeCfg> P2pNetwork<C> for Router<C>
 where
     C::SnapshotData: std::fmt::Debug,
     C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,

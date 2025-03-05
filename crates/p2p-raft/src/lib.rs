@@ -11,6 +11,10 @@ use std::time::Duration;
 
 pub use dinghy::Dinghy;
 use openraft::RaftTypeConfig;
+
+#[cfg(feature = "memstore")]
+pub mod mem;
+#[cfg(feature = "memstore")]
 pub use p2p_raft_memstore::{LogStore, StateMachineStore};
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(500);
@@ -21,7 +25,8 @@ pub const ELECTION_TIMEOUT_MAX: Duration = Duration::from_millis(3000);
 /// The leader will immediately downgrade a node from voter to learner at this time.
 pub const RESPONSIVE_INTERVAL: Duration = Duration::from_millis(2000);
 
-pub trait TypeConf:
+/// Extra trait bounds on RaftTypeConfig which are generally required by this crate.
+pub trait TypeCfg:
     RaftTypeConfig<
     D: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
     R: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
@@ -33,16 +38,3 @@ pub trait TypeConf:
 >
 {
 }
-
-// impl<T> TypeConf for T
-// where
-//     T: RaftTypeConfig<Responder = openraft::impls::OneshotResponder<T>>,
-//     T::D: std::fmt::Debug + Clone,
-//     T::Entry: Clone,
-//     T::Vote: Clone,
-//     T::LeaderId: Clone,
-//     T::SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
-// {
-// }
-
-impl TypeConf for p2p_raft_memstore::TypeConfig {}

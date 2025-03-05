@@ -27,4 +27,6 @@ p2p-raft-memstore = { workspace = true, optional = true }
 
 [features]
 default = ["testing"]
-testing = ["p2p-raft-memstore"]
+
+memstore = ["p2p-raft-memstore"]
+testing = ["memstore"]

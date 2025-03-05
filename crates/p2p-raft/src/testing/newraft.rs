@@ -5,8 +5,8 @@ use openraft::*;
 use p2p_raft_memstore::{LogStore, NodeId, TypeConfig};
 
 use crate::{
-    Dinghy, ELECTION_TIMEOUT_MAX, ELECTION_TIMEOUT_MIN, HEARTBEAT_INTERVAL,
     testing::{Router, RouterNode},
+    Dinghy, ELECTION_TIMEOUT_MAX, ELECTION_TIMEOUT_MIN, HEARTBEAT_INTERVAL,
 };
 
 impl Router<TypeConfig> {
@@ -47,7 +47,7 @@ impl Router<TypeConfig> {
         .await
         .unwrap();
 
-        let dinghy = Dinghy::new(node_id, raft, log_store, self.clone());
+        let dinghy = Dinghy::from_parts(node_id, raft, log_store, self.clone());
 
         self.lock().targets.insert(node_id, dinghy.clone());
 
