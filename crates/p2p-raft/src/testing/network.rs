@@ -30,6 +30,7 @@ use super::Router;
 pub struct Connection<C: TypeConf>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
     C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
@@ -51,6 +52,7 @@ impl RaftNetworkFactory<TypeConfig> for RouterNode<TypeConfig> {
 impl<C: TypeConf> P2pNetwork<C> for Router<C>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
     C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
@@ -98,7 +100,15 @@ impl RaftNetworkV2<TypeConfig> for Connection<TypeConfig> {
     ) -> Result<SnapshotResponse<TypeConfig>, StreamingError<TypeConfig>> {
         match self
             .router
-            .rpc_request(self.target, RaftRequest::Snapshot { vote, snapshot }.into())
+            .rpc_request(
+                self.target,
+                RaftRequest::Snapshot {
+                    vote,
+                    snapshot_meta: snapshot.meta,
+                    snapshot_data: *snapshot.snapshot,
+                }
+                .into(),
+            )
             .await
         {
             Ok(resp) => Ok(resp.unwrap_raft().unwrap_snapshot()),

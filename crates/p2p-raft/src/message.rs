@@ -1,61 +1,123 @@
 use openraft::{
     error::{ClientWriteError, Infallible, RaftError},
     raft::*,
-    Snapshot,
+    SnapshotMeta,
 };
 
 use crate::TypeConf;
 
-#[derive(Debug, derive_more::From)]
+#[derive(Debug, derive_more::From, serde::Serialize, serde::Deserialize)]
+// #[serde(bound(
+//     serialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::Serialize",
+//     deserialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::de::DeserializeOwned"
+// ))]
 pub enum RpcRequest<C: TypeConf>
 where
-    C::D: std::fmt::Debug,
-    C::SnapshotData: std::fmt::Debug,
+    C::D: std::fmt::Debug + Clone,
+    C::Entry: Clone,
+    C::Vote: Clone,
+    C::LeaderId: Clone,
+    C::SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
 {
     Raft(RaftRequest<C>),
     P2p(P2pRequest<C>),
 }
 
-#[derive(Debug, derive_more::From, derive_more::Unwrap)]
+impl<C: TypeConf> Clone for RpcRequest<C>
+where
+    C::D: std::fmt::Debug + Clone,
+    C::Entry: Clone,
+    C::Vote: Clone,
+    C::LeaderId: Clone,
+    C::SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
+{
+    fn clone(&self) -> Self {
+        match self {
+            Self::Raft(r) => Self::Raft(r.clone()),
+            Self::P2p(p) => Self::P2p(p.clone()),
+        }
+    }
+}
+
+#[derive(Debug, derive_more::From, derive_more::Unwrap, serde::Serialize, serde::Deserialize)]
+// #[serde(bound(
+//     serialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::Serialize",
+//     deserialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::de::DeserializeOwned"
+// ))]
 pub enum RpcResponse<C: TypeConf> {
     Ok,
     Raft(RaftResponse<C>),
     P2p(P2pResponse<C>),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum P2pRequest<C: TypeConf> {
     Propose(C::D),
     Join,
     Leave,
 }
 
-#[derive(Debug, derive_more::Unwrap)]
+#[derive(Debug, derive_more::Unwrap, serde::Serialize, serde::Deserialize)]
+// #[serde(bound(
+//     serialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::Serialize",
+//     deserialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::de::DeserializeOwned"
+// ))]
 pub enum P2pResponse<C: TypeConf> {
     Ok,
     RaftError(RaftError<C, ClientWriteError<C>>),
     P2pError(P2pError),
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub enum P2pError {
     NotVoter,
 }
 
-#[derive(Debug, derive_more::From)]
-pub enum RaftRequest<C: TypeConf>
-where
-    C::SnapshotData: std::fmt::Debug,
-{
+#[derive(Debug, derive_more::From, serde::Serialize, serde::Deserialize)]
+// #[serde(bound(
+//     serialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::Serialize",
+//     deserialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::de::DeserializeOwned"
+// ))]
+pub enum RaftRequest<C: TypeConf> {
     Append(AppendEntriesRequest<C>),
     Snapshot {
         vote: C::Vote,
-        snapshot: Snapshot<C>,
+        snapshot_meta: SnapshotMeta<C>,
+        snapshot_data: C::SnapshotData,
     },
     Vote(VoteRequest<C>),
 }
 
-#[derive(derive_more::From, Debug, derive_more::Unwrap)]
+impl<C: TypeConf> Clone for RaftRequest<C>
+where
+    C::D: Clone,
+    C::Entry: Clone,
+    C::Vote: Clone,
+    C::LeaderId: Clone,
+    C::SnapshotData: Clone,
+{
+    fn clone(&self) -> Self {
+        match self {
+            Self::Append(a) => Self::Append(a.clone()),
+            Self::Snapshot {
+                vote,
+                snapshot_meta,
+                snapshot_data,
+            } => Self::Snapshot {
+                vote: vote.clone(),
+                snapshot_meta: snapshot_meta.clone(),
+                snapshot_data: snapshot_data.clone(),
+            },
+            Self::Vote(v) => Self::Vote(v.clone()),
+        }
+    }
+}
+
+#[derive(Debug, derive_more::From, derive_more::Unwrap, serde::Serialize, serde::Deserialize)]
+// #[serde(bound(
+//     serialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::Serialize",
+//     deserialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::de::DeserializeOwned"
+// ))]
 pub enum RaftResponse<C: TypeConf> {
     Append(AppendEntriesResponse<C>),
     Snapshot(SnapshotResponse<C>),

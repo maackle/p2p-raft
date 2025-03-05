@@ -20,6 +20,7 @@ use crate::RESPONSIVE_INTERVAL;
 pub struct RouterNode<C: TypeConf>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
     C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
@@ -31,12 +32,14 @@ where
 pub struct Router<C: TypeConf>(Arc<Mutex<RouterConnections<C>>>)
 where
     C::SnapshotData: std::fmt::Debug,
+    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
     C::D: std::fmt::Debug,
     C::R: std::fmt::Debug;
 
 impl<C: TypeConf> Router<C>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
     C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
@@ -80,6 +83,7 @@ impl Router<TypeConfig> {
 pub struct RouterConnections<C: TypeConf>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
     C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
@@ -95,6 +99,7 @@ static PARTITION_ID: AtomicU64 = AtomicU64::new(1);
 impl<C: TypeConf> RouterConnections<C>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
     C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
@@ -137,6 +142,7 @@ where
 impl<C: TypeConf> RouterNode<C>
 where
     C::SnapshotData: std::fmt::Debug,
+    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
     C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {

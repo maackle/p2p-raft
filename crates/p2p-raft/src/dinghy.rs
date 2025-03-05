@@ -6,7 +6,7 @@ use openraft::{
     alias::ResponderReceiverOf,
     error::{Fatal, InitializeError, RaftError},
     raft::ClientWriteResult,
-    ChangeMembers, Entry, EntryPayload, Raft, RaftTypeConfig, SnapshotMeta,
+    ChangeMembers, Entry, EntryPayload, Raft, RaftTypeConfig, Snapshot, SnapshotMeta,
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 
@@ -36,7 +36,7 @@ pub struct Dinghy<C: TypeConf, N: P2pNetwork<C> = Router<C>> {
 impl<C: TypeConf> Dinghy<C>
 where
     C::SnapshotData: std::fmt::Debug,
-    C::D: std::fmt::Debug,
+    C::SnapshotData: serde::Serialize + serde::de::DeserializeOwned,
     C::D: std::fmt::Debug,
     C::R: std::fmt::Debug,
 {
@@ -147,8 +147,18 @@ where
                 Err(RaftError::APIError(e)) => Ok(e.into()),
                 Err(RaftError::Fatal(e)) => Err(e),
             },
-            RaftRequest::Snapshot { vote, snapshot } => self
-                .install_full_snapshot(vote, snapshot)
+            RaftRequest::Snapshot {
+                vote,
+                snapshot_meta,
+                snapshot_data,
+            } => self
+                .install_full_snapshot(
+                    vote,
+                    Snapshot {
+                        meta: snapshot_meta,
+                        snapshot: Box::new(snapshot_data),
+                    },
+                )
                 .await
                 .map(Into::into),
             RaftRequest::Vote(req) => match self.vote(req).await {

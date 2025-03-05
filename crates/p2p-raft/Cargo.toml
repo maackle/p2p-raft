@@ -16,6 +16,7 @@ maplit = { workspace = true }
 nanoid = { workspace = true }
 parking_lot = { workspace = true }
 rand = { workspace = true }
+serde = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
