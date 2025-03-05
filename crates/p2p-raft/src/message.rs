@@ -42,7 +42,9 @@ pub enum P2pRequest<C: RaftTypeConfig> {
     Leave,
 }
 
-#[derive(Debug, derive_more::Unwrap, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, derive_more::Unwrap, serde::Serialize, serde::Deserialize,
+)]
 #[serde(bound(
     serialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::Serialize",
     deserialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::de::DeserializeOwned"
@@ -53,7 +55,7 @@ pub enum P2pResponse<C: RaftTypeConfig> {
     P2pError(P2pError),
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum P2pError {
     NotVoter,
 }

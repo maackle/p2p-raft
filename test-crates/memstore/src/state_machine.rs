@@ -5,22 +5,9 @@ use std::sync::Mutex;
 use openraft::alias::SnapshotDataOf;
 use openraft::storage::RaftStateMachine;
 use openraft::*;
-use serde::Deserialize;
-use serde::Serialize;
 
 use crate::StateMachineData;
 use crate::TypeConfig;
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Request {
-    Num(u64),
-    Set { key: String, value: String },
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Response {
-    pub value: Option<String>,
-}
 
 #[derive(Debug)]
 pub struct StoredSnapshot<C: RaftTypeConfig> {
@@ -126,6 +113,10 @@ impl RaftStateMachine<TypeConfig> for Arc<StateMachineStore<TypeConfig>> {
             tracing::debug!(%entry.log_id, "replicate to sm");
 
             sm.last_applied = Some(entry.log_id);
+
+            if let EntryPayload::Normal(d) = entry.payload {
+                sm.data.push(d);
+            }
 
             res.push(())
         }
