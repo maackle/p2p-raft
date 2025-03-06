@@ -1,20 +1,20 @@
-use std::{collections::BTreeSet, future::Future, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, future::Future, time::Duration};
 
+use maplit::btreemap;
 use openraft::{
     alias::ResponderReceiverOf,
     error::{Fatal, InitializeError, RaftError},
     raft::ClientWriteResult,
     ChangeMembers, Entry, EntryPayload, Raft, Snapshot,
 };
-use tokio::{sync::Mutex, task::JoinHandle};
+use tokio::task::JoinHandle;
 
 use crate::{
     message::{
         P2pError, P2pRequest, P2pResponse, RaftRequest, RaftResponse, RpcRequest, RpcResponse,
     },
     network::P2pNetwork,
-    peer_tracker::PeerTracker,
-    TypeCfg,
+    PeerTrackerHandle, TypeCfg,
 };
 
 const CHORE_INTERVAL: Duration = Duration::from_secs(1);
@@ -26,7 +26,7 @@ pub struct Dinghy<C: TypeCfg, N: P2pNetwork<C>> {
 
     pub id: C::NodeId,
     pub store: p2p_raft_memstore::LogStore<C>,
-    pub tracker: Arc<Mutex<PeerTracker<C>>>,
+    pub tracker: PeerTrackerHandle<C>,
     pub network: N,
 }
 
@@ -41,7 +41,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
             id,
             raft,
             store,
-            tracker: PeerTracker::new(),
+            tracker: PeerTrackerHandle::new(),
             network,
         }
     }
@@ -172,8 +172,11 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
                 self.raft.client_write(data).await
             }
             P2pRequest::Join => {
-                self.change_membership(ChangeMembers::AddVoterIds([from.clone()].into()), true)
-                    .await
+                self.change_membership(
+                    ChangeMembers::AddVoters(btreemap![from.clone() => ()]),
+                    true,
+                )
+                .await
             }
             P2pRequest::Leave => {
                 self.change_membership(ChangeMembers::RemoveVoters([from.clone()].into()), true)

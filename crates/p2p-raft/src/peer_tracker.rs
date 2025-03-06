@@ -12,17 +12,21 @@ use tokio::{sync::Mutex, time::Instant};
 
 use crate::{network::P2pNetwork, Dinghy, TypeCfg};
 
+#[derive(Clone, derive_more::Deref)]
+pub struct PeerTrackerHandle<C: TypeCfg>(Arc<Mutex<PeerTracker<C>>>);
+
+impl<C: TypeCfg> PeerTrackerHandle<C> {
+    pub fn new() -> Self {
+        Self(Arc::new(Mutex::new(PeerTracker::default())))
+    }
+}
+
+#[derive(Default)]
 pub struct PeerTracker<C: TypeCfg> {
     last_seen: BTreeMap<C::NodeId, Instant>,
 }
 
 impl<C: TypeCfg> PeerTracker<C> {
-    pub fn new() -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(Self {
-            last_seen: Default::default(),
-        }))
-    }
-
     pub fn touch(&mut self, node: &C::NodeId) {
         self.last_seen.insert(node.clone(), Instant::now());
     }
@@ -32,10 +36,12 @@ impl<C: TypeCfg> PeerTracker<C> {
         raft: &Dinghy<C, N>,
         interval: Duration,
     ) {
-        // TODO: don't skip!
-        // return;
+        if !raft.is_leader().await {
+            return;
+        }
+
         let unresponsive = self.unresponsive_members(raft, interval).await;
-        if !unresponsive.is_empty() && raft.is_leader().await {
+        if !unresponsive.is_empty() {
             match raft
                 .change_membership(ChangeMembers::RemoveVoters(unresponsive.clone()), true)
                 .await

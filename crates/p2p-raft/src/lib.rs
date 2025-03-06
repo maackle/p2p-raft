@@ -9,8 +9,10 @@ pub mod testing;
 
 use std::time::Duration;
 
-pub use dinghy::Dinghy;
 use openraft::RaftTypeConfig;
+
+pub use dinghy::Dinghy;
+pub use peer_tracker::{PeerTracker, PeerTrackerHandle};
 
 #[cfg(feature = "memstore")]
 pub mod mem;
@@ -34,6 +36,7 @@ pub trait TypeCfg:
     Vote: Clone + serde::Serialize + serde::de::DeserializeOwned,
     LeaderId: Clone + serde::Serialize + serde::de::DeserializeOwned,
     SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
+    Node = (),
     Responder = openraft::impls::OneshotResponder<Self>,
 >
 {

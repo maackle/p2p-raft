@@ -162,11 +162,7 @@ impl RouterNode {
 
         {
             let mut t = d.tracker.lock().await;
-
             t.touch(&to);
-
-            // TODO: only the leader should do this
-            // dbg!(d.id);
             t.handle_absentees(&d, RESPONSIVE_INTERVAL).await;
         }
 
