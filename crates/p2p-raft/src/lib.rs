@@ -15,7 +15,7 @@ use openraft::RaftTypeConfig;
 #[cfg(feature = "memstore")]
 pub mod mem;
 #[cfg(feature = "memstore")]
-pub use p2p_raft_memstore::{LogStore, StateMachineStore};
+pub use p2p_raft_memstore::{LogStore, StateMachineData, StateMachineStore};
 
 pub const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(500);
 pub const ELECTION_TIMEOUT_MIN: Duration = Duration::from_millis(1500);

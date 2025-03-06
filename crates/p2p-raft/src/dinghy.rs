@@ -214,15 +214,12 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
                     // if there is a leader and I'm not a voter, ask to rejoin the cluster
                     match dinghy
                         .network
-                        .send(source.clone(), leader, P2pRequest::Join)
+                        .send_p2p(source.clone(), leader, P2pRequest::Join)
                         .await
                     {
-                        P2pResponse::Ok => {}
-                        P2pResponse::P2pError(e) => {
-                            println!("failed to send join request to leader: {e:?}");
-                        }
-                        P2pResponse::RaftError(e) => {
-                            tracing::warn!("raft error when sending join request to leader: {e:?}");
+                        Ok(P2pResponse::Ok) => {}
+                        r => {
+                            tracing::error!("failed to send join request to leader: {r:?}");
                         }
                     }
                 }

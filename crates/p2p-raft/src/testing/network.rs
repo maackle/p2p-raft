@@ -15,8 +15,6 @@ use openraft::OptionalSend;
 use openraft::RaftNetworkFactory;
 use openraft::Snapshot;
 use openraft::Vote;
-use p2p_raft_memstore::NodeId;
-use p2p_raft_memstore::TypeConfig;
 
 use crate::message::P2pRequest;
 use crate::message::P2pResponse;
@@ -24,6 +22,8 @@ use crate::message::RaftRequest;
 use crate::network::P2pNetwork;
 
 use super::router::RouterNode;
+use super::NodeId;
+use super::TypeConfig;
 
 pub struct Connection {
     router: RouterNode,
@@ -42,19 +42,16 @@ impl RaftNetworkFactory<TypeConfig> for RouterNode {
 }
 
 impl P2pNetwork<TypeConfig> for RouterNode {
-    fn send(
+    async fn send_p2p(
         &self,
         source: NodeId,
         target: NodeId,
         req: P2pRequest<TypeConfig>,
-    ) -> impl Future<Output = P2pResponse<TypeConfig>> {
-        async move {
-            // dbg!(&source);
-            let tgt = self.router.lock().targets.get(&target).unwrap().clone();
-            tgt.handle_p2p_request(source.clone(), req)
-                .await
-                .expect("fatal error")
-        }
+    ) -> Result<P2pResponse<TypeConfig>, RPCError<TypeConfig>> {
+        let tgt = self.router.lock().targets.get(&target).unwrap().clone();
+        tgt.handle_p2p_request(source.clone(), req)
+            .await
+            .map_err(|e| RPCError::Unreachable(Unreachable::new(&e)))
     }
 }
 impl RaftNetworkV2<TypeConfig> for Connection {

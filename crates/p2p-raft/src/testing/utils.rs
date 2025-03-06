@@ -5,7 +5,7 @@ use openraft::ServerState;
 
 use super::*;
 
-pub type Dinghy = crate::Dinghy<p2p_raft_memstore::TypeConfig, RouterNode>;
+pub type Dinghy = crate::Dinghy<super::TypeConfig, RouterNode>;
 
 pub async fn initialized_router(num_peers: u64) -> (Router, Vec<Dinghy>) {
     let all_ids = (0..num_peers).collect::<BTreeSet<_>>();

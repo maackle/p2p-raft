@@ -5,9 +5,9 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::NodeId;
+use super::TypeConfig;
 use openraft::AnyError;
-use p2p_raft_memstore::NodeId;
-use p2p_raft_memstore::TypeConfig;
 use parking_lot::Mutex;
 
 use crate::message::RpcRequest;

@@ -1,6 +1,6 @@
 use openraft::*;
 
-use p2p_raft_memstore::{NodeId, TypeConfig};
+use super::{NodeId, TypeConfig};
 
 use crate::{
     testing::{Router, RouterNode},
