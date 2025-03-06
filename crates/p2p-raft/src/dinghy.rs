@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, future::Future, time::Duration};
+use std::{collections::BTreeSet, future::Future, sync::Arc};
 
 use maplit::btreemap;
 use openraft::{
@@ -10,6 +10,7 @@ use openraft::{
 use tokio::task::JoinHandle;
 
 use crate::{
+    config::DinghyConfig,
     message::{
         P2pError, P2pRequest, P2pResponse, RaftRequest, RaftResponse, RpcRequest, RpcResponse,
     },
@@ -17,13 +18,12 @@ use crate::{
     PeerTrackerHandle, TypeCfg,
 };
 
-const CHORE_INTERVAL: Duration = Duration::from_secs(1);
-
 #[derive(Clone, derive_more::Deref)]
 pub struct Dinghy<C: TypeCfg, N: P2pNetwork<C>> {
     #[deref]
     pub raft: Raft<C>,
 
+    pub config: Arc<DinghyConfig>,
     pub id: C::NodeId,
     pub store: p2p_raft_memstore::LogStore<C>,
     pub tracker: PeerTrackerHandle<C>,
@@ -31,21 +31,6 @@ pub struct Dinghy<C: TypeCfg, N: P2pNetwork<C>> {
 }
 
 impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
-    pub fn from_parts(
-        id: C::NodeId,
-        raft: Raft<C>,
-        store: p2p_raft_memstore::LogStore<C>,
-        network: N,
-    ) -> Self {
-        Self {
-            id,
-            raft,
-            store,
-            tracker: PeerTrackerHandle::new(),
-            network,
-        }
-    }
-
     pub async fn is_leader(&self) -> bool {
         self.current_leader().await.as_ref() == Some(&self.id)
     }
@@ -194,7 +179,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
         let source = self.id.clone();
         let dinghy = self.clone();
 
-        let mut interval = tokio::time::interval(CHORE_INTERVAL);
+        let mut interval = tokio::time::interval(self.config.p2p_config.join_interval);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
         tokio::spawn(async move {

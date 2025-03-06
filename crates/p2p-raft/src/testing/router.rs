@@ -10,9 +10,9 @@ use super::TypeConfig;
 use openraft::AnyError;
 use parking_lot::Mutex;
 
+use crate::config::DinghyConfig;
 use crate::message::RpcRequest;
 use crate::message::RpcResponse;
-use crate::RESPONSIVE_INTERVAL;
 
 type Dinghy = crate::Dinghy<TypeConfig, RouterNode>;
 
@@ -23,10 +23,21 @@ pub struct RouterNode {
     pub router: Router,
 }
 
-#[derive(Default, Clone, derive_more::Deref)]
-pub struct Router(Arc<Mutex<RouterConnections>>);
+#[derive(Clone, derive_more::Deref, Default)]
+pub struct Router {
+    #[deref]
+    pub connections: Arc<Mutex<RouterConnections>>,
+    pub config: Arc<DinghyConfig>,
+}
 
 impl Router {
+    pub fn new(config: DinghyConfig) -> Self {
+        Self {
+            connections: Arc::new(Mutex::new(RouterConnections::default())),
+            config: Arc::new(config),
+        }
+    }
+
     /// Create partitions in the network specified by a list of lists of node ids.
     ///
     /// Each list in the list represents a new partition which the specified nodes
@@ -37,7 +48,7 @@ impl Router {
         &mut self,
         partitions: impl IntoIterator<Item = impl IntoIterator<Item = NodeId>>,
     ) {
-        self.0.lock().create_partitions(partitions);
+        self.lock().create_partitions(partitions);
     }
 }
 
@@ -46,7 +57,8 @@ impl Router {
         let mut rafts = Vec::new();
 
         for node in nodes {
-            let raft = self.new_raft(node).await;
+            let config = self.config.clone();
+            let raft = self.new_raft(node, config).await;
             rafts.push(raft);
         }
         rafts
@@ -163,7 +175,8 @@ impl RouterNode {
         {
             let mut t = d.tracker.lock().await;
             t.touch(&to);
-            t.handle_absentees(&d, RESPONSIVE_INTERVAL).await;
+            t.handle_absentees(&d, self.router.config.p2p_config.responsive_interval)
+                .await;
         }
 
         Ok(res)

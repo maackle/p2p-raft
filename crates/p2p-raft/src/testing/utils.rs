@@ -3,13 +3,15 @@ use std::{collections::BTreeSet, time::Duration};
 use itertools::Itertools;
 use openraft::ServerState;
 
+use crate::config::DinghyConfig;
+
 use super::*;
 
 pub type Dinghy = crate::Dinghy<super::TypeConfig, RouterNode>;
 
-pub async fn initialized_router(num_peers: u64) -> (Router, Vec<Dinghy>) {
+pub async fn initialized_router(num_peers: u64, config: DinghyConfig) -> (Router, Vec<Dinghy>) {
     let all_ids = (0..num_peers).collect::<BTreeSet<_>>();
-    let mut router = Router::default();
+    let mut router = Router::new(config);
     let rafts = router.add_nodes(all_ids.clone()).await;
 
     println!("router created.");
@@ -34,7 +36,7 @@ pub fn spawn_info_loop(mut rafts: Vec<Dinghy>, poll_interval_ms: u64) {
                 println!("........................................................");
                 for r in rafts.iter_mut() {
                     let t = r.tracker.lock().await;
-                    let peers = t.responsive_peers(crate::RESPONSIVE_INTERVAL);
+                    let peers = t.responsive_peers(r.config.p2p_config.responsive_interval);
                     let members = r
                         .raft
                         .with_raft_state(|s| {

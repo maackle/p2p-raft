@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openraft::{alias::NodeIdOf, storage::RaftStateMachine};
 use p2p_raft_memstore::ArcStateMachineStore;
 
-use crate::network::P2pNetwork;
+use crate::{config::DinghyConfig, network::P2pNetwork};
 
 use super::*;
 
@@ -12,8 +12,12 @@ where
     C: TypeCfg,
     ArcStateMachineStore<C>: RaftStateMachine<C>,
 {
-    pub async fn new_mem(node_id: NodeIdOf<C>, config: openraft::Config, network: N) -> Self {
-        let config = Arc::new(config.validate().unwrap());
+    pub async fn new_mem(
+        node_id: NodeIdOf<C>,
+        config: impl Into<Arc<DinghyConfig>>,
+        network: N,
+    ) -> Self {
+        let config = config.into();
 
         // Create a instance of where the Raft logs will be stored.
         let log_store = LogStore::default();
@@ -25,7 +29,7 @@ where
         // Create a local raft instance.
         let raft = openraft::Raft::new(
             node_id.clone(),
-            config,
+            config.raft_config.clone().into(),
             network.clone(),
             log_store.clone(),
             state_machine_store.clone(),
@@ -33,7 +37,14 @@ where
         .await
         .unwrap();
 
-        Dinghy::from_parts(node_id, raft, log_store, network)
+        Dinghy {
+            raft,
+            id: node_id,
+            store: log_store,
+            tracker: PeerTrackerHandle::new(),
+            network,
+            config,
+        }
     }
 
     // /// NOTE: only run this as leader!
