@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, time::Duration};
 use itertools::Itertools;
 use openraft::ServerState;
 
-use crate::config::DinghyConfig;
+use crate::{config::DinghyConfig, network::P2pNetwork};
 
 use super::*;
 
@@ -26,7 +26,14 @@ pub async fn initialized_router(num_peers: u64, config: DinghyConfig) -> (Router
 }
 
 #[allow(warnings)]
-pub fn spawn_info_loop(mut rafts: Vec<Dinghy>, poll_interval_ms: u64) {
+pub fn spawn_info_loop<C, N>(mut rafts: Vec<crate::Dinghy<C, N>>, poll_interval_ms: u64)
+where
+    C: crate::TypeCfg<
+        Entry = openraft::Entry<C>,
+        SnapshotData = p2p_raft_memstore::StateMachineData<C>,
+    >,
+    N: P2pNetwork<C>,
+{
     tokio::spawn({
         let mut interval = tokio::time::interval(Duration::from_millis(poll_interval_ms));
         async move {
@@ -35,37 +42,7 @@ pub fn spawn_info_loop(mut rafts: Vec<Dinghy>, poll_interval_ms: u64) {
                 println!();
                 println!("........................................................");
                 for r in rafts.iter_mut() {
-                    let t = r.tracker.lock().await;
-                    let peers = t.responsive_peers(r.config.p2p_config.responsive_interval);
-                    let members = r
-                        .raft
-                        .with_raft_state(|s| {
-                            s.membership_state
-                                .committed()
-                                .voter_ids()
-                                .collect::<BTreeSet<_>>()
-                        })
-                        .await
-                        .unwrap();
-                    let log = r.read_log_data().await;
-                    let snapshot = r
-                        .raft
-                        .get_snapshot()
-                        .await
-                        .unwrap()
-                        .map(|s| s.snapshot.data);
-
-                    let lines = [
-                        format!("... "),
-                        format!("{}", r.id),
-                        format!("<{:?}>", r.current_leader().await),
-                        format!("members {:?}", members),
-                        format!("sees {:?}", peers),
-                        // format!("snapshot {:?}", snapshot),
-                        // format!("log {:?}", log),
-                    ];
-
-                    println!("{}", lines.into_iter().join(" "))
+                    println!("{}", r.debug_line().await);
                 }
                 println!("........................................................");
                 println!();

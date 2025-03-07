@@ -215,3 +215,46 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
         })
     }
 }
+
+#[cfg(feature = "testing")]
+impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N>
+where
+    C: TypeCfg<Entry = Entry<C>, SnapshotData = p2p_raft_memstore::StateMachineData<C>>,
+{
+    #[allow(unused_variables)]
+    pub async fn debug_line(&self) -> String {
+        use itertools::Itertools;
+        let t = self.tracker.lock().await;
+        let peers = t.responsive_peers(self.config.p2p_config.responsive_interval);
+        let members = self
+            .raft
+            .with_raft_state(|s| {
+                s.membership_state
+                    .committed()
+                    .voter_ids()
+                    .collect::<BTreeSet<_>>()
+            })
+            .await
+            .unwrap();
+
+        let log = self.read_log_data().await;
+        let snapshot = self
+            .raft
+            .get_snapshot()
+            .await
+            .unwrap()
+            .map(|s| s.snapshot.data);
+
+        let lines = [
+            format!("... "),
+            format!("{}", self.id),
+            format!("<{:?}>", self.current_leader().await),
+            format!("members {:?}", members),
+            format!("sees {:?}", peers),
+            // format!("snapshot {:?}", snapshot),
+            // format!("log {:?}", log),
+        ];
+
+        lines.into_iter().join(" ")
+    }
+}
