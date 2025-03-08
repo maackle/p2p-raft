@@ -17,7 +17,7 @@ async fn natural_startup() {
     println!("router created.");
 
     for (n, raft) in rafts.iter().enumerate() {
-        let _ = raft.spawn_chore_loop();
+        let _ = tokio::spawn(raft.clone().chore_loop());
         let ids = all_ids[0..=n].to_vec();
         raft.initialize(ids.clone()).await.unwrap();
         for m in ids {

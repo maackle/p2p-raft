@@ -7,7 +7,6 @@ use openraft::{
     raft::ClientWriteResult,
     ChangeMembers, Entry, EntryPayload, Raft, Snapshot,
 };
-use tokio::task::JoinHandle;
 
 use crate::{
     config::DinghyConfig,
@@ -175,44 +174,42 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
         })
     }
 
-    pub fn spawn_chore_loop(&self) -> JoinHandle<()> {
+    pub async fn chore_loop(self) {
         let source = self.id.clone();
         let dinghy = self.clone();
 
         let mut interval = tokio::time::interval(self.config.p2p_config.join_interval);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
-        tokio::spawn(async move {
-            loop {
-                interval.tick().await;
+        loop {
+            interval.tick().await;
 
-                if let Some(leader) = dinghy.current_leader().await {
-                    let is_leader = leader == source;
+            if let Some(leader) = dinghy.current_leader().await {
+                let is_leader = leader == source;
 
-                    let is_voter = if let Ok(l) = dinghy.is_voter(&source).await {
-                        l
-                    } else {
-                        continue;
-                    };
+                let is_voter = if let Ok(l) = dinghy.is_voter(&source).await {
+                    l
+                } else {
+                    continue;
+                };
 
-                    if is_leader || is_voter {
-                        continue;
-                    }
+                if is_leader || is_voter {
+                    continue;
+                }
 
-                    // if there is a leader and I'm not a voter, ask to rejoin the cluster
-                    match dinghy
-                        .network
-                        .send_p2p(source.clone(), leader, P2pRequest::Join)
-                        .await
-                    {
-                        Ok(P2pResponse::Ok) => {}
-                        r => {
-                            tracing::error!("failed to send join request to leader: {r:?}");
-                        }
+                // if there is a leader and I'm not a voter, ask to rejoin the cluster
+                match dinghy
+                    .network
+                    .send_p2p(source.clone(), leader, P2pRequest::Join)
+                    .await
+                {
+                    Ok(P2pResponse::Ok) => {}
+                    r => {
+                        tracing::error!("failed to send join request to leader: {r:?}");
                     }
                 }
             }
-        })
+        }
     }
 }
 

@@ -7,9 +7,9 @@ use crate::{config::DinghyConfig, network::P2pNetwork};
 
 use super::*;
 
-pub type Dinghy = crate::Dinghy<super::TypeConfig, RouterNode>;
+type TestDinghy = crate::Dinghy<super::TypeConfig, RouterNode>;
 
-pub async fn initialized_router(num_peers: u64, config: DinghyConfig) -> (Router, Vec<Dinghy>) {
+pub async fn initialized_router(num_peers: u64, config: DinghyConfig) -> (Router, Vec<TestDinghy>) {
     let all_ids = (0..num_peers).collect::<BTreeSet<_>>();
     let mut router = Router::new(config);
     let rafts = router.add_nodes(all_ids.clone()).await;
@@ -17,7 +17,7 @@ pub async fn initialized_router(num_peers: u64, config: DinghyConfig) -> (Router
     println!("router created.");
 
     for (_, raft) in rafts.iter().enumerate() {
-        let _ = raft.spawn_chore_loop();
+        let _ = tokio::spawn(raft.clone().chore_loop());
         raft.initialize(all_ids.clone()).await.unwrap();
         println!("initialized {}.", raft.id);
     }
@@ -51,12 +51,19 @@ where
     });
 }
 
-pub async fn await_any_leader_t(
-    dinghies: &[Dinghy],
+pub async fn await_any_leader_t<C, N>(
+    dinghies: &[crate::Dinghy<C, N>],
     timeout: Option<Duration>,
-) -> anyhow::Result<u64> {
+) -> anyhow::Result<C::NodeId>
+where
+    C: crate::TypeCfg<
+        Entry = openraft::Entry<C>,
+        SnapshotData = p2p_raft_memstore::StateMachineData<C>,
+    >,
+    N: P2pNetwork<C>,
+{
     let start = std::time::Instant::now();
-    let ids = dinghies.iter().map(|r| r.id).collect_vec();
+    let ids = dinghies.iter().map(|r| r.id.clone()).collect_vec();
     println!("awaiting any leader for {ids:?}");
     let futs = dinghies.iter().map(|r| {
         Box::pin(async move {
@@ -73,9 +80,16 @@ pub async fn await_any_leader_t(
     Ok(leader)
 }
 
-pub async fn await_any_leader(dinghies: &[Dinghy]) -> u64 {
+pub async fn await_any_leader<C, N>(dinghies: &[crate::Dinghy<C, N>]) -> C::NodeId
+where
+    C: crate::TypeCfg<
+        Entry = openraft::Entry<C>,
+        SnapshotData = p2p_raft_memstore::StateMachineData<C>,
+    >,
+    N: P2pNetwork<C>,
+{
     let start = std::time::Instant::now();
-    let ids = dinghies.iter().map(|r| r.id).collect_vec();
+    let ids = dinghies.iter().map(|r| r.id.clone()).collect_vec();
     println!("awaiting any leader for {ids:?}");
     let futs = dinghies.iter().map(|r| {
         Box::pin(async move {
@@ -90,12 +104,15 @@ pub async fn await_any_leader(dinghies: &[Dinghy]) -> u64 {
     let leader = res.unwrap().id;
     let election_time = start.elapsed();
 
-    futures::future::join_all(dinghies.iter().map(|r| async move {
-        if r.id != leader {
-            r.wait(None)
-                .current_leader(leader, "await consensus")
-                .await
-                .unwrap();
+    futures::future::join_all(dinghies.iter().map(|r| {
+        let leader = leader.clone();
+        async move {
+            if r.id != leader {
+                r.wait(None)
+                    .current_leader(leader, "await consensus")
+                    .await
+                    .unwrap();
+            }
         }
     }))
     .await;
@@ -108,9 +125,16 @@ pub async fn await_any_leader(dinghies: &[Dinghy]) -> u64 {
     leader
 }
 
-pub async fn await_partition_stability(dinghies: &[Dinghy]) {
+pub async fn await_partition_stability<C, N>(dinghies: &[crate::Dinghy<C, N>])
+where
+    C: crate::TypeCfg<
+        Entry = openraft::Entry<C>,
+        SnapshotData = p2p_raft_memstore::StateMachineData<C>,
+    >,
+    N: P2pNetwork<C>,
+{
     let start = std::time::Instant::now();
-    let ids = dinghies.iter().map(|r| r.id).collect_vec();
+    let ids = dinghies.iter().map(|r| r.id.clone()).collect_vec();
 
     println!("~~ awaiting stability for partition {ids:?}",);
 

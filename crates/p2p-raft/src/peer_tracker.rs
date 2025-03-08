@@ -37,6 +37,13 @@ impl<C: TypeCfg> PeerTracker<C> {
         interval: Duration,
     ) {
         if !raft.is_leader().await {
+            // XXX: this is an easy way to ensure that when we switch to being a leader,
+            //      we don't immediately remove all nodes, because we weren't talking to them
+            //      while there was a different leader.
+            self.last_seen.values_mut().for_each(|t| {
+                *t = Instant::now();
+            });
+
             return;
         }
 
