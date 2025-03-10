@@ -14,6 +14,7 @@ use crate::{
         P2pError, P2pRequest, P2pResponse, RaftRequest, RaftResponse, RpcRequest, RpcResponse,
     },
     network::P2pNetwork,
+    signal::{LogData, RaftEvent, SignalSender},
     PeerTrackerHandle, TypeCfg,
 };
 
@@ -27,6 +28,7 @@ pub struct Dinghy<C: TypeCfg, N: P2pNetwork<C>> {
     pub store: p2p_raft_memstore::LogStore<C>,
     pub tracker: PeerTrackerHandle<C>,
     pub network: N,
+    pub(crate) signal_tx: Option<SignalSender<C>>,
 }
 
 impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
@@ -112,11 +114,37 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
         raft_req: RaftRequest<C>,
     ) -> Result<RaftResponse<C>, Fatal<C>> {
         let res: RaftResponse<C> = match raft_req {
-            RaftRequest::Append(req) => match self.append_entries(req).await {
-                Ok(r) => Ok(r.into()),
-                Err(RaftError::APIError(e)) => Ok(e.into()),
-                Err(RaftError::Fatal(e)) => Err(e),
-            },
+            RaftRequest::Append(req) => {
+                // Send signals
+                if let Some(tx) = self.signal_tx.as_ref() {
+                    for e in req.entries.iter() {
+                        let signal = match &e.payload {
+                            EntryPayload::Normal(data) => {
+                                Some(RaftEvent::EntryCommitted(LogData {
+                                    id: e.log_id.clone(),
+                                    data: data.clone(),
+                                }))
+                            }
+                            EntryPayload::Membership(m) => Some(RaftEvent::MembershipChanged(
+                                m.voter_ids().collect::<BTreeSet<_>>(),
+                            )),
+                            _ => None,
+                        };
+                        if let Some(signal) = signal {
+                            tx.send(signal).await.map_err(|_| {
+                                tracing::error!("failed to send RaftEvent signal. PANIC!");
+                                Fatal::Panicked
+                            })?;
+                        }
+                    }
+                }
+
+                match self.append_entries(req).await {
+                    Ok(r) => Ok(r.into()),
+                    Err(RaftError::APIError(e)) => Ok(e.into()),
+                    Err(RaftError::Fatal(e)) => Err(e),
+                }
+            }
             RaftRequest::Snapshot {
                 vote,
                 snapshot_meta,

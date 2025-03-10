@@ -6,6 +6,7 @@ use super::{NodeId, TypeConfig};
 
 use crate::{
     config::DinghyConfig,
+    signal::SignalSender,
     testing::{Router, RouterNode},
     Dinghy,
 };
@@ -25,13 +26,14 @@ impl Router {
         &self,
         node_id: NodeId,
         config: impl Into<Arc<DinghyConfig>>,
+        signal_tx: Option<SignalSender<TypeConfig>>,
     ) -> Dinghy<TypeConfig, RouterNode> {
         let node = RouterNode {
             source: node_id,
             router: self.clone(),
         };
 
-        let dinghy = Dinghy::new_mem(node_id, config, node).await;
+        let dinghy = Dinghy::new_mem(node_id, config, node, signal_tx).await;
 
         self.lock().targets.insert(node_id, dinghy.clone());
 

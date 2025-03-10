@@ -5,6 +5,7 @@ mod types;
 mod config;
 pub mod message;
 pub mod network;
+pub mod signal;
 #[cfg(feature = "testing")]
 pub mod testing;
 
@@ -24,10 +25,10 @@ pub trait TypeCfg:
     RaftTypeConfig<
     D: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
     R: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
-    Entry: Clone + serde::Serialize + serde::de::DeserializeOwned,
     Vote: Clone + serde::Serialize + serde::de::DeserializeOwned,
     LeaderId: Clone + serde::Serialize + serde::de::DeserializeOwned,
     SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
+    Entry = openraft::Entry<Self>,
     Node = (),
     Responder = openraft::impls::OneshotResponder<Self>,
 >

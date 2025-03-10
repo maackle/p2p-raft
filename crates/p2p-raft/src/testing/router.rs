@@ -58,7 +58,7 @@ impl Router {
 
         for node in nodes {
             let config = self.config.clone();
-            let raft = self.new_raft(node, config).await;
+            let raft = self.new_raft(node, config, None).await;
             rafts.push(raft);
         }
         rafts

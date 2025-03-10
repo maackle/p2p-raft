@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openraft::{alias::NodeIdOf, storage::RaftStateMachine};
 use p2p_raft_memstore::ArcStateMachineStore;
 
-use crate::{config::DinghyConfig, network::P2pNetwork};
+use crate::{config::DinghyConfig, network::P2pNetwork, signal::SignalSender};
 
 use super::*;
 
@@ -16,6 +16,7 @@ where
         node_id: NodeIdOf<C>,
         config: impl Into<Arc<DinghyConfig>>,
         network: N,
+        signal_tx: Option<SignalSender<C>>,
     ) -> Self {
         let config = config.into();
 
@@ -44,6 +45,7 @@ where
             tracker: PeerTrackerHandle::new(),
             network,
             config,
+            signal_tx,
         }
     }
 
