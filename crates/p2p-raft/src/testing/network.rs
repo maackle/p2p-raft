@@ -88,7 +88,7 @@ impl RaftNetworkV2<TypeConfig> for Connection {
                 RaftRequest::Snapshot {
                     vote,
                     snapshot_meta: snapshot.meta,
-                    snapshot_data: *snapshot.snapshot,
+                    snapshot_data: snapshot.snapshot,
                 }
                 .into(),
             )

@@ -126,7 +126,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
                     vote,
                     Snapshot {
                         meta: snapshot_meta,
-                        snapshot: Box::new(snapshot_data),
+                        snapshot: snapshot_data,
                     },
                 )
                 .await

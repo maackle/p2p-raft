@@ -98,7 +98,7 @@ where
 
         Ok(Snapshot {
             meta,
-            snapshot: Box::new(data),
+            snapshot: data,
         })
     }
 }
@@ -145,23 +145,21 @@ where
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    async fn begin_receiving_snapshot(
-        &mut self,
-    ) -> Result<Box<SnapshotDataOf<C>>, StorageError<C>> {
-        Ok(Box::default())
+    async fn begin_receiving_snapshot(&mut self) -> Result<SnapshotDataOf<C>, StorageError<C>> {
+        Ok(Default::default())
     }
 
     #[tracing::instrument(level = "trace", skip(self, snapshot))]
     async fn install_snapshot(
         &mut self,
         meta: &SnapshotMeta<C>,
-        snapshot: Box<SnapshotDataOf<C>>,
+        snapshot: SnapshotDataOf<C>,
     ) -> Result<(), StorageError<C>> {
         tracing::info!("install snapshot");
 
         let new_snapshot = StoredSnapshot {
             meta: meta.clone(),
-            data: (*snapshot).clone(),
+            data: snapshot.clone(),
         };
 
         // Update the state machine.
@@ -184,7 +182,7 @@ where
                 let data = snapshot.data.clone();
                 Ok(Some(Snapshot {
                     meta: snapshot.meta.clone(),
-                    snapshot: Box::new(data),
+                    snapshot: data,
                 }))
             }
             None => Ok(None),
