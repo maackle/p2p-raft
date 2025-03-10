@@ -13,6 +13,7 @@ use parking_lot::Mutex;
 use crate::config::DinghyConfig;
 use crate::message::RpcRequest;
 use crate::message::RpcResponse;
+use crate::signal::SignalSender;
 
 type Dinghy = crate::Dinghy<TypeConfig, RouterNode>;
 
@@ -28,13 +29,15 @@ pub struct Router {
     #[deref]
     pub connections: Arc<Mutex<RouterConnections>>,
     pub config: Arc<DinghyConfig>,
+    signal_tx: Option<SignalSender<TypeConfig>>,
 }
 
 impl Router {
-    pub fn new(config: DinghyConfig) -> Self {
+    pub fn new(config: DinghyConfig, signal_tx: Option<SignalSender<TypeConfig>>) -> Self {
         Self {
             connections: Arc::new(Mutex::new(RouterConnections::default())),
             config: Arc::new(config),
+            signal_tx,
         }
     }
 
@@ -58,7 +61,7 @@ impl Router {
 
         for node in nodes {
             let config = self.config.clone();
-            let raft = self.new_raft(node, config, None).await;
+            let raft = self.new_raft(node, config, self.signal_tx.clone()).await;
             rafts.push(raft);
         }
         rafts

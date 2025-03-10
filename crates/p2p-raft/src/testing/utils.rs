@@ -3,15 +3,19 @@ use std::{collections::BTreeSet, time::Duration};
 use itertools::Itertools;
 use openraft::ServerState;
 
-use crate::{config::DinghyConfig, network::P2pNetwork};
+use crate::{config::DinghyConfig, network::P2pNetwork, signal::SignalSender};
 
 use super::*;
 
 type TestDinghy = crate::Dinghy<super::TypeConfig, RouterNode>;
 
-pub async fn initialized_router(num_peers: u64, config: DinghyConfig) -> (Router, Vec<TestDinghy>) {
+pub async fn initialized_router(
+    num_peers: u64,
+    config: DinghyConfig,
+    signal_tx: Option<SignalSender<TypeConfig>>,
+) -> (Router, Vec<TestDinghy>) {
     let all_ids = (0..num_peers).collect::<BTreeSet<_>>();
-    let mut router = Router::new(config);
+    let mut router = Router::new(config, signal_tx);
     let rafts = router.add_nodes(all_ids.clone()).await;
 
     println!("router created.");

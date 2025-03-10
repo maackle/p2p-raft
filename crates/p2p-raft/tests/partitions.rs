@@ -9,7 +9,7 @@ async fn natural_startup() {
     let mut config = DinghyConfig::default();
     config.p2p_config.join_interval = Duration::from_millis(100);
     config.p2p_config.responsive_interval = Duration::from_millis(500);
-    let mut router = Router::new(config);
+    let mut router = Router::new(config, None);
     let rafts = router.add_nodes(all_ids.clone()).await;
 
     // spawn_info_loop(rafts.clone(), 100);
@@ -42,7 +42,7 @@ async fn shrink_and_grow_and_shrink() {
 
     const NUM_PEERS: u64 = 5;
 
-    let (mut router, rafts) = initialized_router(NUM_PEERS, DinghyConfig::testing(50)).await;
+    let (mut router, rafts) = initialized_router(NUM_PEERS, DinghyConfig::testing(50), None).await;
 
     // spawn_info_loop(rafts.clone(), 1000);
 
