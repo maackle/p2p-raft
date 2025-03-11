@@ -2,7 +2,11 @@ use p2p_raft::{testing::*, DinghyConfig};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_snapshot() {
-    let (mut _router, rafts) = initialized_router(5, DinghyConfig::default(), None).await;
+    const NUM_PEERS: u64 = 5;
+    let mut router = Router::new(DinghyConfig::default(), None);
+    let rafts = router.add_nodes(0..NUM_PEERS).await;
+    router.initialize_nodes().await;
+
     spawn_info_loop(rafts.clone(), 1000);
 
     let leader = await_any_leader(&rafts).await as usize;

@@ -4,6 +4,10 @@ use std::time::Duration;
 pub struct DinghyConfig {
     pub raft_config: openraft::Config,
     pub p2p_config: P2pConfig,
+
+    /// If true, the node will send membership signals.
+    /// False by default, because this is currently unstable.
+    pub unstable_membership_signals: bool,
 }
 
 impl DinghyConfig {

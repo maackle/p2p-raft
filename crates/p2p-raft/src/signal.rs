@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use openraft::LogId;
+use openraft::{LogId, RaftTypeConfig};
 use serde::{Deserialize, Serialize};
 
 use crate::TypeCfg;
@@ -32,4 +32,4 @@ pub enum RaftEvent<C: TypeCfg> {
 //     pub data: C::D,
 // }
 
-pub type SignalSender<C> = tokio::sync::mpsc::Sender<RaftEvent<C>>;
+pub type SignalSender<C> = tokio::sync::mpsc::Sender<(<C as RaftTypeConfig>::NodeId, RaftEvent<C>)>;
