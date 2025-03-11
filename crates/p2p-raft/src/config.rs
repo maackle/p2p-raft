@@ -4,10 +4,6 @@ use std::time::Duration;
 pub struct DinghyConfig {
     pub raft_config: openraft::Config,
     pub p2p_config: P2pConfig,
-
-    /// If true, the node will send membership signals.
-    /// False by default, because this is currently unstable.
-    pub unstable_membership_signals: bool,
 }
 
 impl DinghyConfig {
@@ -32,6 +28,10 @@ pub struct P2pConfig {
     /// The interval at which the node will attempt to send join requests to other nodes
     /// when it discovers it is no longer a voter.
     pub join_interval: Duration,
+
+    /// If true, the node will send membership signals.
+    /// False by default, because this is currently unstable.
+    pub unstable_membership_signals: bool,
 }
 
 impl Default for P2pConfig {
@@ -39,6 +39,7 @@ impl Default for P2pConfig {
         Self {
             responsive_interval: Duration::from_millis(3000),
             join_interval: Duration::from_millis(3000),
+            unstable_membership_signals: false,
         }
     }
 }

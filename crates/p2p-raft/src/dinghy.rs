@@ -125,13 +125,12 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
                             }),
                             EntryPayload::Membership(m) => {
                                 // only send membership signals if the membership is not in a joint config
+                                let enabled = self.config.p2p_config.unstable_membership_signals;
                                 let stable_config = m.get_joint_config().len() <= 1;
-                                (self.config.unstable_membership_signals && stable_config).then(
-                                    || RaftEvent::MembershipChanged {
-                                        log_id: e.log_id.clone(),
-                                        members: m.voter_ids().collect::<BTreeSet<_>>(),
-                                    },
-                                )
+                                (enabled && stable_config).then(|| RaftEvent::MembershipChanged {
+                                    log_id: e.log_id.clone(),
+                                    members: m.voter_ids().collect::<BTreeSet<_>>(),
+                                })
                             }
                             _ => None,
                         };
