@@ -1,13 +1,7 @@
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
-use maplit::btreemap;
-use openraft::LogId;
-use p2p_raft::{
-    signal::{LogData, RaftEvent},
-    testing::*,
-    DinghyConfig,
-};
+use p2p_raft::{testing::*, DinghyConfig};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn receive_signals() {
@@ -20,6 +14,8 @@ async fn receive_signals() {
     let leader = await_any_leader(&rafts).await as usize;
 
     rafts[leader].write_linearizable(0).await.unwrap();
+    rafts[leader].write_linearizable(1).await.unwrap();
+    rafts[leader].write_linearizable(2).await.unwrap();
 
     sleep(100).await;
 
@@ -31,9 +27,9 @@ async fn receive_signals() {
         *e += 1;
     }
 
-    assert_eq!(signals.len(), 2);
+    assert_eq!(signals.len(), 4);
     assert_eq!(
         signals.values().copied().collect_vec(),
-        vec![NUM_PEERS - 1; 2]
+        vec![NUM_PEERS - 1; 4]
     );
 }

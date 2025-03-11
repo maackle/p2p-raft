@@ -14,7 +14,7 @@ use crate::{
         P2pError, P2pRequest, P2pResponse, RaftRequest, RaftResponse, RpcRequest, RpcResponse,
     },
     network::P2pNetwork,
-    signal::{LogData, RaftEvent, SignalSender},
+    signal::{RaftEvent, SignalSender},
     PeerTrackerHandle, TypeCfg,
 };
 
@@ -119,15 +119,14 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
                 if let Some(tx) = self.signal_tx.as_ref() {
                     for e in req.entries.iter() {
                         let signal = match &e.payload {
-                            EntryPayload::Normal(data) => {
-                                Some(RaftEvent::EntryCommitted(LogData {
-                                    id: e.log_id.clone(),
-                                    data: data.clone(),
-                                }))
-                            }
-                            EntryPayload::Membership(m) => Some(RaftEvent::MembershipChanged(
-                                m.voter_ids().collect::<BTreeSet<_>>(),
-                            )),
+                            EntryPayload::Normal(data) => Some(RaftEvent::EntryCommitted {
+                                log_id: e.log_id.clone(),
+                                data: data.clone(),
+                            }),
+                            EntryPayload::Membership(m) => Some(RaftEvent::MembershipChanged {
+                                log_id: e.log_id.clone(),
+                                members: m.voter_ids().collect::<BTreeSet<_>>(),
+                            }),
                             _ => None,
                         };
                         if let Some(signal) = signal {
