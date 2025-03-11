@@ -5,31 +5,18 @@ use p2p_raft::{message, testing::*, DinghyConfig};
 #[tokio::test(flavor = "multi_thread")]
 async fn natural_startup() {
     let num_peers = 5;
-    let all_ids = (0..num_peers).collect::<Vec<_>>();
     let mut config = DinghyConfig::default();
     config.p2p_config.join_interval = Duration::from_millis(100);
     config.p2p_config.responsive_interval = Duration::from_millis(500);
+
     let mut router = Router::new(config, None);
-    let rafts = router.add_nodes(all_ids.clone()).await;
+    let rafts = router.add_nodes(0..num_peers).await;
+
+    router.natural_startup(Duration::from_millis(10)).await;
 
     // spawn_info_loop(rafts.clone(), 100);
 
     println!("router created.");
-
-    for (n, raft) in rafts.iter().enumerate() {
-        let _ = tokio::spawn(raft.clone().chore_loop());
-        let ids = all_ids[0..=n].to_vec();
-        raft.initialize(ids.clone()).await.unwrap();
-        for m in ids {
-            if m != raft.id {
-                raft.network
-                    .rpc_request(m, message::P2pRequest::Join.into())
-                    .await
-                    .unwrap();
-            }
-        }
-        println!("initialized {}.", raft.id);
-    }
 
     await_partition_stability(&rafts).await;
 }
@@ -42,7 +29,9 @@ async fn shrink_and_grow_and_shrink() {
 
     const NUM_PEERS: u64 = 5;
 
-    let (mut router, rafts) = initialized_router(NUM_PEERS, DinghyConfig::testing(50), None).await;
+    let mut router = Router::new(DinghyConfig::testing(50), None);
+    let rafts = router.add_nodes(0..NUM_PEERS).await;
+    router.initialize_nodes().await;
 
     // spawn_info_loop(rafts.clone(), 1000);
 

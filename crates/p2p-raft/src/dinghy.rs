@@ -123,10 +123,14 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
                                 log_id: e.log_id.clone(),
                                 data: data.clone(),
                             }),
-                            EntryPayload::Membership(m) => Some(RaftEvent::MembershipChanged {
-                                log_id: e.log_id.clone(),
-                                members: m.voter_ids().collect::<BTreeSet<_>>(),
-                            }),
+                            EntryPayload::Membership(m) => {
+                                // only send membership signals if the membership is not in a joint config
+                                let stable_config = m.get_joint_config().len() <= 1;
+                                stable_config.then(|| RaftEvent::MembershipChanged {
+                                    log_id: e.log_id.clone(),
+                                    members: m.voter_ids().collect::<BTreeSet<_>>(),
+                                })
+                            }
                             _ => None,
                         };
                         if let Some(signal) = signal {

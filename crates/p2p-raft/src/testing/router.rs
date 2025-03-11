@@ -11,6 +11,7 @@ use openraft::AnyError;
 use parking_lot::Mutex;
 
 use crate::config::DinghyConfig;
+use crate::message::P2pRequest;
 use crate::message::RpcRequest;
 use crate::message::RpcResponse;
 use crate::signal::SignalSender;
@@ -38,6 +39,41 @@ impl Router {
             connections: Arc::new(Mutex::new(RouterConnections::default())),
             config: Arc::new(config),
             signal_tx,
+        }
+    }
+
+    pub fn rafts(&self) -> Vec<Dinghy> {
+        self.lock().targets.values().cloned().collect()
+    }
+
+    pub async fn initialize_nodes(&self) {
+        let rafts = self.rafts();
+        let all_ids = rafts.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
+        for (_, raft) in rafts.iter().enumerate() {
+            let _ = tokio::spawn(raft.clone().chore_loop());
+            raft.initialize(all_ids.clone()).await.unwrap();
+            println!("initialized {}.", raft.id);
+        }
+    }
+
+    pub async fn natural_startup(&self, delay: Duration) {
+        let rafts = self.rafts();
+        let all_ids = rafts.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
+
+        for (n, raft) in rafts.iter().enumerate() {
+            let _ = tokio::spawn(raft.clone().chore_loop());
+            let ids = all_ids[0..=n].to_vec();
+            raft.initialize(ids.clone()).await.unwrap();
+            for m in ids {
+                if m != raft.id {
+                    raft.network
+                        .rpc_request(m, P2pRequest::Join.into())
+                        .await
+                        .unwrap();
+                }
+            }
+            println!("initialized {}.", raft.id);
+            tokio::time::sleep(delay).await;
         }
     }
 

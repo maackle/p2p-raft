@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 
 use itertools::Itertools;
 use p2p_raft::{testing::*, DinghyConfig};
@@ -8,8 +8,9 @@ async fn receive_signals() {
     const NUM_PEERS: u64 = 4;
     let (tx, mut rx) = tokio::sync::mpsc::channel(100);
 
-    let (mut router, rafts) =
-        initialized_router(NUM_PEERS, DinghyConfig::testing(50), Some(tx)).await;
+    let mut router = Router::new(DinghyConfig::testing(50), Some(tx));
+    let rafts = router.add_nodes(0..NUM_PEERS).await;
+    router.natural_startup(Duration::from_millis(100)).await;
 
     let leader = await_any_leader(&rafts).await as usize;
 

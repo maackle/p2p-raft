@@ -9,26 +9,6 @@ use super::*;
 
 type TestDinghy = crate::Dinghy<super::TypeConfig, RouterNode>;
 
-pub async fn initialized_router(
-    num_peers: u64,
-    config: DinghyConfig,
-    signal_tx: Option<SignalSender<TypeConfig>>,
-) -> (Router, Vec<TestDinghy>) {
-    let all_ids = (0..num_peers).collect::<BTreeSet<_>>();
-    let mut router = Router::new(config, signal_tx);
-    let rafts = router.add_nodes(all_ids.clone()).await;
-
-    println!("router created.");
-
-    for (_, raft) in rafts.iter().enumerate() {
-        let _ = tokio::spawn(raft.clone().chore_loop());
-        raft.initialize(all_ids.clone()).await.unwrap();
-        println!("initialized {}.", raft.id);
-    }
-
-    (router, rafts)
-}
-
 #[allow(warnings)]
 pub fn spawn_info_loop<C, N>(mut rafts: Vec<crate::Dinghy<C, N>>, poll_interval_ms: u64)
 where
