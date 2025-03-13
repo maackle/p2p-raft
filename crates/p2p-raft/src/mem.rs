@@ -17,6 +17,7 @@ where
         config: impl Into<Arc<Config>>,
         network: N,
         signal_tx: Option<SignalSender<C>>,
+        nodemap: impl Fn(C::NodeId) -> C::Node + Send + Sync + 'static,
     ) -> Self {
         let config = config.into();
 
@@ -46,6 +47,7 @@ where
             network,
             config,
             signal_tx,
+            nodemap: Arc::new(nodemap),
         }
     }
 

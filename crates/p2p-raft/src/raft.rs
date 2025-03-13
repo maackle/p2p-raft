@@ -29,6 +29,7 @@ pub struct P2pRaft<C: TypeCfg, N: P2pNetwork<C>> {
     pub tracker: PeerTrackerHandle<C>,
     pub network: N,
     pub(crate) signal_tx: Option<SignalSender<C>>,
+    pub(crate) nodemap: Arc<dyn Fn(C::NodeId) -> C::Node + Send + Sync + 'static>,
 }
 
 impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
@@ -189,7 +190,9 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             }
             P2pRequest::Join => {
                 self.change_membership(
-                    ChangeMembers::AddVoters(btreemap![from.clone() => ()]),
+                    ChangeMembers::AddVoters(
+                        btreemap![from.clone() => (self.nodemap)(from.clone())],
+                    ),
                     true,
                 )
                 .await

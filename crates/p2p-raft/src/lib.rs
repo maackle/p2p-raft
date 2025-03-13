@@ -29,7 +29,7 @@ pub trait TypeCfg:
     LeaderId: Clone + serde::Serialize + serde::de::DeserializeOwned,
     SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
     Entry = openraft::Entry<Self>,
-    Node = (),
+    // Node = (),
     Responder = openraft::impls::OneshotResponder<Self>,
 >
 {

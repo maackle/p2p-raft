@@ -1,4 +1,4 @@
-//! Provide storage layer implementation for examples.
+//! Provides basic in-memory storage layer implementations, for simple use cases or as a starting point.
 //!
 //! adapted from https://github.com/databendlabs/openraft/blob/cc2b37ad8b10c1871fb4dbc9b9422234f0b222ec/stores/memstore/src/lib.rs
 

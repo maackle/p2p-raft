@@ -31,7 +31,7 @@ impl Router {
             router: self.clone(),
         };
 
-        let raft = P2pRaft::new_mem(node_id, config, node, signal_tx).await;
+        let raft = P2pRaft::new_mem(node_id, config, node, signal_tx, |_| ()).await;
 
         self.lock().targets.insert(node_id, raft.clone());
 
