@@ -1,5 +1,5 @@
-mod dinghy;
 mod peer_tracker;
+mod raft;
 mod types;
 
 mod config;
@@ -11,9 +11,9 @@ pub mod testing;
 
 use openraft::RaftTypeConfig;
 
-pub use config::DinghyConfig;
-pub use dinghy::Dinghy;
+pub use config::Config;
 pub use peer_tracker::{PeerTracker, PeerTrackerHandle};
+pub use raft::P2pRaft;
 
 #[cfg(feature = "memstore")]
 pub mod mem;

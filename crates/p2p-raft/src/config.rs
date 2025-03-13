@@ -1,12 +1,12 @@
 use std::time::Duration;
 
 #[derive(Clone, Debug, Default)]
-pub struct DinghyConfig {
+pub struct Config {
     pub raft_config: openraft::Config,
     pub p2p_config: P2pConfig,
 }
 
-impl DinghyConfig {
+impl Config {
     pub fn testing(heartbeat: u64) -> Self {
         let mut config = Self::default();
         config.p2p_config.join_interval = Duration::from_millis(heartbeat * 6);

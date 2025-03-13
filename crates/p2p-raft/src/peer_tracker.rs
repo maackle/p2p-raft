@@ -10,7 +10,7 @@ use openraft::{
 };
 use tokio::{sync::Mutex, time::Instant};
 
-use crate::{network::P2pNetwork, Dinghy, TypeCfg};
+use crate::{network::P2pNetwork, P2pRaft, TypeCfg};
 
 #[derive(Clone, derive_more::Deref)]
 pub struct PeerTrackerHandle<C: TypeCfg>(Arc<Mutex<PeerTracker<C>>>);
@@ -33,7 +33,7 @@ impl<C: TypeCfg> PeerTracker<C> {
 
     pub async fn handle_absentees<N: P2pNetwork<C>>(
         &mut self,
-        raft: &Dinghy<C, N>,
+        raft: &P2pRaft<C, N>,
         interval: Duration,
     ) {
         if !raft.is_leader().await {
@@ -87,7 +87,7 @@ impl<C: TypeCfg> PeerTracker<C> {
 
     async fn unresponsive_members<N: P2pNetwork<C>>(
         &self,
-        raft: &Dinghy<C, N>,
+        raft: &P2pRaft<C, N>,
         interval: Duration,
     ) -> BTreeSet<C::NodeId> {
         let here = self.responsive_peers(interval);

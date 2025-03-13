@@ -1,9 +1,10 @@
-use p2p_raft::{testing::*, DinghyConfig};
+use p2p_raft::{testing::*, Config};
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "waiting on resolution of https://github.com/databendlabs/openraft/issues/1333#issuecomment-2705359074"]
 async fn test_snapshot() {
     const NUM_PEERS: u64 = 5;
-    let mut router = Router::new(DinghyConfig::default(), None);
+    let mut router = Router::new(Config::default(), None);
     let rafts = router.add_nodes(0..NUM_PEERS).await;
     router.initialize_nodes().await;
 
@@ -16,7 +17,6 @@ async fn test_snapshot() {
     rafts[leader].write_linearizable(2).await.unwrap();
     println!("wrote data.");
 
-    todo!();
     // rafts[leader].replace_snapshot(vec![5, 4, 3, 2, 1]).await;
     println!("replaced snapshot.");
 

@@ -5,11 +5,11 @@ use openraft::{
     alias::ResponderReceiverOf,
     error::{Fatal, InitializeError, RaftError},
     raft::ClientWriteResult,
-    ChangeMembers, Entry, EntryPayload, Raft, Snapshot,
+    ChangeMembers, Entry, EntryPayload, Snapshot,
 };
 
 use crate::{
-    config::DinghyConfig,
+    config::Config,
     message::{
         P2pError, P2pRequest, P2pResponse, RaftRequest, RaftResponse, RpcRequest, RpcResponse,
     },
@@ -19,11 +19,11 @@ use crate::{
 };
 
 #[derive(Clone, derive_more::Deref)]
-pub struct Dinghy<C: TypeCfg, N: P2pNetwork<C>> {
+pub struct P2pRaft<C: TypeCfg, N: P2pNetwork<C>> {
     #[deref]
-    pub raft: Raft<C>,
+    pub raft: openraft::Raft<C>,
 
-    pub config: Arc<DinghyConfig>,
+    pub config: Arc<Config>,
     pub id: C::NodeId,
     pub store: p2p_raft_memstore::LogStore<C>,
     pub tracker: PeerTrackerHandle<C>,
@@ -31,7 +31,7 @@ pub struct Dinghy<C: TypeCfg, N: P2pNetwork<C>> {
     pub(crate) signal_tx: Option<SignalSender<C>>,
 }
 
-impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
+impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
     pub async fn is_leader(&self) -> bool {
         self.current_leader().await.as_ref() == Some(&self.id)
     }
@@ -208,7 +208,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
 
     pub async fn chore_loop(self) {
         let source = self.id.clone();
-        let dinghy = self.clone();
+        let raft = self.clone();
 
         let mut interval = tokio::time::interval(self.config.p2p_config.join_interval);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -216,10 +216,10 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
         loop {
             interval.tick().await;
 
-            if let Some(leader) = dinghy.current_leader().await {
+            if let Some(leader) = raft.current_leader().await {
                 let is_leader = leader == source;
 
-                let is_voter = if let Ok(l) = dinghy.is_voter(&source).await {
+                let is_voter = if let Ok(l) = raft.is_voter(&source).await {
                     l
                 } else {
                     continue;
@@ -230,7 +230,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
                 }
 
                 // if there is a leader and I'm not a voter, ask to rejoin the cluster
-                match dinghy
+                match raft
                     .network
                     .send_p2p(source.clone(), leader, P2pRequest::Join)
                     .await
@@ -246,7 +246,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N> {
 }
 
 #[cfg(feature = "testing")]
-impl<C: TypeCfg, N: P2pNetwork<C>> Dinghy<C, N>
+impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N>
 where
     C: TypeCfg<Entry = Entry<C>, SnapshotData = p2p_raft_memstore::StateMachineData<C>>,
 {

@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use itertools::Itertools;
-use p2p_raft::{testing::*, DinghyConfig};
+use p2p_raft::{testing::*, Config};
 
 /// EntryCommitted signals are eventually emitted by all members,
 /// and there are no duplicates.
@@ -12,7 +12,7 @@ async fn receive_signals() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(100);
 
-    let mut router = Router::new(DinghyConfig::testing(50), Some(tx));
+    let mut router = Router::new(Config::testing(50), Some(tx));
     let rafts = router.add_nodes(0..NUM_PEERS).await;
     router.natural_startup(Duration::from_millis(10)).await;
 

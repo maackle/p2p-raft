@@ -1,16 +1,12 @@
-use std::{collections::BTreeSet, time::Duration};
+use std::time::Duration;
 
 use itertools::Itertools;
 use openraft::ServerState;
 
-use crate::{config::DinghyConfig, network::P2pNetwork, signal::SignalSender};
-
-use super::*;
-
-type TestDinghy = crate::Dinghy<super::TypeConfig, RouterNode>;
+use crate::network::P2pNetwork;
 
 #[allow(warnings)]
-pub fn spawn_info_loop<C, N>(mut rafts: Vec<crate::Dinghy<C, N>>, poll_interval_ms: u64)
+pub fn spawn_info_loop<C, N>(mut rafts: Vec<crate::P2pRaft<C, N>>, poll_interval_ms: u64)
 where
     C: crate::TypeCfg<
         Entry = openraft::Entry<C>,
@@ -36,7 +32,7 @@ where
 }
 
 pub async fn await_any_leader_t<C, N>(
-    dinghies: &[crate::Dinghy<C, N>],
+    rafts: &[crate::P2pRaft<C, N>],
     timeout: Option<Duration>,
 ) -> anyhow::Result<C::NodeId>
 where
@@ -47,9 +43,9 @@ where
     N: P2pNetwork<C>,
 {
     let start = std::time::Instant::now();
-    let ids = dinghies.iter().map(|r| r.id.clone()).collect_vec();
+    let ids = rafts.iter().map(|r| r.id.clone()).collect_vec();
     println!("awaiting any leader for {ids:?}");
-    let futs = dinghies.iter().map(|r| {
+    let futs = rafts.iter().map(|r| {
         Box::pin(async move {
             r.raft
                 .wait(timeout)
@@ -64,7 +60,7 @@ where
     Ok(leader)
 }
 
-pub async fn await_any_leader<C, N>(dinghies: &[crate::Dinghy<C, N>]) -> C::NodeId
+pub async fn await_any_leader<C, N>(rafts: &[crate::P2pRaft<C, N>]) -> C::NodeId
 where
     C: crate::TypeCfg<
         Entry = openraft::Entry<C>,
@@ -73,9 +69,9 @@ where
     N: P2pNetwork<C>,
 {
     let start = std::time::Instant::now();
-    let ids = dinghies.iter().map(|r| r.id.clone()).collect_vec();
+    let ids = rafts.iter().map(|r| r.id.clone()).collect_vec();
     println!("awaiting any leader for {ids:?}");
-    let futs = dinghies.iter().map(|r| {
+    let futs = rafts.iter().map(|r| {
         Box::pin(async move {
             r.raft
                 .wait(None)
@@ -88,7 +84,7 @@ where
     let leader = res.unwrap().id;
     let election_time = start.elapsed();
 
-    futures::future::join_all(dinghies.iter().map(|r| {
+    futures::future::join_all(rafts.iter().map(|r| {
         let leader = leader.clone();
         async move {
             if r.id != leader {
@@ -109,7 +105,7 @@ where
     leader
 }
 
-pub async fn await_partition_stability<C, N>(dinghies: &[crate::Dinghy<C, N>])
+pub async fn await_partition_stability<C, N>(rafts: &[crate::P2pRaft<C, N>])
 where
     C: crate::TypeCfg<
         Entry = openraft::Entry<C>,
@@ -118,11 +114,11 @@ where
     N: P2pNetwork<C>,
 {
     let start = std::time::Instant::now();
-    let ids = dinghies.iter().map(|r| r.id.clone()).collect_vec();
+    let ids = rafts.iter().map(|r| r.id.clone()).collect_vec();
 
     println!("~~ awaiting stability for partition {ids:?}",);
 
-    futures::future::join_all(dinghies.iter().map(|r| {
+    futures::future::join_all(rafts.iter().map(|r| {
         let r = r.clone();
         let ids = ids.clone();
         async move { r.wait(None).voter_ids(ids, "partition stability").await }

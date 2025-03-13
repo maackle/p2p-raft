@@ -3,18 +3,18 @@ use std::sync::Arc;
 use openraft::{alias::NodeIdOf, storage::RaftStateMachine};
 use p2p_raft_memstore::ArcStateMachineStore;
 
-use crate::{config::DinghyConfig, network::P2pNetwork, signal::SignalSender};
+use crate::{config::Config, network::P2pNetwork, signal::SignalSender};
 
 use super::*;
 
-impl<C, N: P2pNetwork<C>> Dinghy<C, N>
+impl<C, N: P2pNetwork<C>> P2pRaft<C, N>
 where
     C: TypeCfg,
     ArcStateMachineStore<C>: RaftStateMachine<C>,
 {
     pub async fn new_mem(
         node_id: NodeIdOf<C>,
-        config: impl Into<Arc<DinghyConfig>>,
+        config: impl Into<Arc<Config>>,
         network: N,
         signal_tx: Option<SignalSender<C>>,
     ) -> Self {
@@ -38,7 +38,7 @@ where
         .await
         .unwrap();
 
-        Dinghy {
+        P2pRaft {
             raft,
             id: node_id,
             store: log_store,

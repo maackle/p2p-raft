@@ -10,13 +10,13 @@ use super::TypeConfig;
 use openraft::AnyError;
 use parking_lot::Mutex;
 
-use crate::config::DinghyConfig;
+use crate::config::Config;
 use crate::message::P2pRequest;
 use crate::message::RpcRequest;
 use crate::message::RpcResponse;
 use crate::signal::SignalSender;
 
-type Dinghy = crate::Dinghy<TypeConfig, RouterNode>;
+type P2pRaft = crate::P2pRaft<TypeConfig, RouterNode>;
 
 /// Simulate a network router.
 #[derive(Clone)]
@@ -29,12 +29,12 @@ pub struct RouterNode {
 pub struct Router {
     #[deref]
     pub connections: Arc<Mutex<RouterConnections>>,
-    pub config: Arc<DinghyConfig>,
+    pub config: Arc<Config>,
     signal_tx: Option<SignalSender<TypeConfig>>,
 }
 
 impl Router {
-    pub fn new(config: DinghyConfig, signal_tx: Option<SignalSender<TypeConfig>>) -> Self {
+    pub fn new(config: Config, signal_tx: Option<SignalSender<TypeConfig>>) -> Self {
         Self {
             connections: Arc::new(Mutex::new(RouterConnections::default())),
             config: Arc::new(config),
@@ -42,7 +42,7 @@ impl Router {
         }
     }
 
-    pub fn rafts(&self) -> Vec<Dinghy> {
+    pub fn rafts(&self) -> Vec<P2pRaft> {
         self.lock().targets.values().cloned().collect()
     }
 
@@ -92,7 +92,7 @@ impl Router {
 }
 
 impl Router {
-    pub async fn add_nodes(&mut self, nodes: impl IntoIterator<Item = u64>) -> Vec<Dinghy> {
+    pub async fn add_nodes(&mut self, nodes: impl IntoIterator<Item = u64>) -> Vec<P2pRaft> {
         let mut rafts = Vec::new();
 
         for node in nodes {
@@ -106,7 +106,7 @@ impl Router {
 
 #[derive(Clone, Default)]
 pub struct RouterConnections {
-    pub targets: BTreeMap<NodeId, Dinghy>,
+    pub targets: BTreeMap<NodeId, P2pRaft>,
     pub latency: HashMap<(NodeId, NodeId), u64>,
     pub partitions: BTreeMap<NodeId, PartitionId>,
 }
@@ -201,7 +201,7 @@ impl RouterNode {
             // println!("resp {} <- {}: {:?}", self.source, to, res);
         }
 
-        let d = self
+        let r = self
             .router
             .lock()
             .targets
@@ -212,9 +212,9 @@ impl RouterNode {
         // println!("touching {} <- {}", self.source, to);
 
         {
-            let mut t = d.tracker.lock().await;
+            let mut t = r.tracker.lock().await;
             t.touch(&to);
-            t.handle_absentees(&d, self.router.config.p2p_config.responsive_interval)
+            t.handle_absentees(&r, self.router.config.p2p_config.responsive_interval)
                 .await;
         }
 
