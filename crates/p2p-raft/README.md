@@ -2,4 +2,4 @@
 
 # usage
 
-make sure to spawn the chore_loop()
+make sure to spawn the `chore_loop()`
