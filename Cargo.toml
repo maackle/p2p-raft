@@ -22,10 +22,10 @@ tracing-subscriber = "*"
 
 anyerror = { version = "*", features = ["anyhow"] }
 
-openraft = { git = "https://github.com/databendlabs/openraft", features = [
+openraft = { git = "https://github.com/maackle/openraft", branch = "adapt-v1-feature", features = [
   "type-alias",
 ] }
-openraft-macros = { git = "https://github.com/databendlabs/openraft" }
-openraft-memstore = { git = "https://github.com/databendlabs/openraft" }
+openraft-macros = { git = "https://github.com/maackle/openraft", branch = "adapt-v1-feature" }
+openraft-memstore = { git = "https://github.com/maackle/openraft", branch = "adapt-v1-feature" }
 
 p2p-raft-memstore = { path = "crates/p2p-raft-memstore" }
