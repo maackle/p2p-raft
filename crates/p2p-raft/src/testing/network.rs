@@ -20,6 +20,7 @@ use openraft::Vote;
 use crate::message::P2pRequest;
 use crate::message::P2pResponse;
 use crate::message::RaftRequest;
+use crate::message::Response;
 use crate::network::P2pNetwork;
 
 use super::router::RouterNode;
@@ -52,10 +53,10 @@ impl P2pNetwork<TypeConfig> for RouterNode {
         target: NodeId,
         req: P2pRequest<TypeConfig>,
     ) -> anyhow::Result<P2pResponse<TypeConfig>> {
-        let tgt = self.router.lock().targets.get(&target).unwrap().clone();
-        tgt.handle_p2p_request(self.local_node_id(), req)
-            .await
-            .map_err(Into::into)
+        match self.route(target, req.into()).await? {
+            Response::P2p(resp) => Ok(resp),
+            Response::Raft(_) => anyhow::bail!("received raft response"),
+        }
     }
 }
 impl RaftNetworkV2<TypeConfig> for Connection {

@@ -10,7 +10,6 @@ use super::TypeConfig;
 use parking_lot::Mutex;
 
 use crate::config::Config;
-use crate::message::P2pRequest;
 use crate::message::Request;
 use crate::message::Response;
 use crate::signal::SignalSender;
@@ -63,14 +62,7 @@ impl Router {
             let _ = tokio::spawn(raft.clone().chore_loop());
             let ids = all_ids[0..=n].to_vec();
             raft.initialize(ids.clone()).await.unwrap();
-            for m in ids {
-                if m != raft.id {
-                    raft.network
-                        .route(m, P2pRequest::Join.into())
-                        .await
-                        .unwrap();
-                }
-            }
+            raft.broadcast_join(ids.clone()).await.unwrap();
             println!("initialized {}.", raft.id);
             tokio::time::sleep(delay).await;
         }

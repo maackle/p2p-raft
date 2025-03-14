@@ -1,5 +1,7 @@
 use std::{collections::BTreeSet, future::Future, sync::Arc};
 
+use futures::future;
+use itertools::Itertools;
 use maplit::btreemap;
 use openraft::{
     alias::ResponderReceiverOf,
@@ -59,6 +61,37 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             // this error is ok, it means we got some network messages already
             Err(RaftError::APIError(InitializeError::NotAllowed(_))) => Ok(()),
             Err(e) => Err(e.into()),
+        }
+    }
+
+    pub async fn broadcast_join(
+        &self,
+        ids: impl IntoIterator<Item = C::NodeId>,
+    ) -> anyhow::Result<()> {
+        let network = self.network.clone();
+
+        let results = future::join_all(
+            ids.into_iter()
+                .filter(|id| *id != self.id)
+                .map(|id| network.send_p2p(id, P2pRequest::Join)),
+        )
+        .await;
+
+        let num_results = results.len();
+
+        let errors = results
+            .into_iter()
+            .filter_map(|r| match r {
+                Ok(_) => None,
+                Err(e) => Some(e),
+            })
+            .collect_vec();
+
+        // Only error if we had no successes at all
+        if errors.len() < num_results {
+            Ok(())
+        } else {
+            anyhow::bail!("failed to join any nodes. All errors: {:?}", errors);
         }
     }
 
@@ -169,7 +202,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         Ok(res)
     }
 
-    pub async fn handle_p2p_request(
+    pub(crate) async fn handle_p2p_request(
         &self,
         from: C::NodeId,
         req: P2pRequest<C>,

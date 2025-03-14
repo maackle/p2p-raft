@@ -22,6 +22,51 @@ async fn natural_startup() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn join_later() {
+    const NUM_PEERS: u64 = 3;
+    let mut router = Router::new(Config::testing(50), None);
+    let rafts = router.add_nodes(0..NUM_PEERS).await;
+    router.initialize_nodes().await;
+    await_partition_stability(&rafts[..]).await;
+    await_any_leader(&rafts[..]).await;
+
+    router.add_nodes([NUM_PEERS]).await;
+    let rafts = router.rafts();
+    let noob = rafts[NUM_PEERS as usize].clone();
+
+    noob.initialize(0..=NUM_PEERS).await.unwrap();
+    noob.broadcast_join(0..=NUM_PEERS).await.unwrap();
+    await_partition_stability(&rafts[..]).await;
+    await_any_leader(&rafts[..]).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn join_errors() {
+    let mut router = Router::new(Config::testing(50), None);
+    let rafts = router.add_nodes(0..5).await;
+
+    router.create_partitions([[0], [1]]).await;
+    router.initialize_nodes().await;
+    await_partition_stability(&rafts[2..]).await;
+
+    let r = rafts[0].broadcast_join(0..5).await;
+    assert!(r.is_err());
+
+    router.create_partitions([vec![0, 1, 2, 3, 4]]).await;
+    await_partition_stability(&rafts[..]).await;
+    await_any_leader(&rafts[..]).await;
+
+    router.create_partitions([vec![0, 1, 2], vec![3, 4]]).await;
+    await_partition_stability(&rafts[0..=2]).await;
+    let leader = await_any_leader(&rafts[0..=2]).await;
+    let nonleader = (leader + 1) % 2;
+    rafts[nonleader as usize]
+        .broadcast_join(0..5)
+        .await
+        .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn shrink_and_grow_and_shrink() {
     // tracing_subscriber::fmt::fmt()
     //     .with_max_level(tracing::Level::ERROR)
