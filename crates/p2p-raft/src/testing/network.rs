@@ -48,7 +48,7 @@ impl P2pNetwork<TypeConfig> for RouterNode {
         self.source
     }
 
-    async fn send_p2p(
+    async fn send_rpc(
         &self,
         target: NodeId,
         req: P2pRequest<TypeConfig>,

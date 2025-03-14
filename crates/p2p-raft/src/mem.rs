@@ -12,23 +12,21 @@ where
     C: TypeCfg,
     ArcStateMachineStore<C>: RaftStateMachine<C>,
 {
-    pub async fn new_mem(
+    /// Create a new raft instance with in-memory storage and a trivial state machine.
+    pub async fn create_in_memory(
         node_id: NodeIdOf<C>,
         config: impl Into<Arc<Config>>,
         network: N,
         signal_tx: Option<SignalSender<C>>,
         nodemap: impl Fn(C::NodeId) -> C::Node + Send + Sync + 'static,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let config = config.into();
 
-        // Create a instance of where the Raft logs will be stored.
         let log_store = LogStore::default();
 
-        // Create a instance of where the state machine data will be stored.
         let state_machine_store =
             ArcStateMachineStore::from(Arc::new(p2p_raft_memstore::StateMachineStore::default()));
 
-        // Create a local raft instance.
         let raft = openraft::Raft::new(
             node_id.clone(),
             config.raft_config.clone().into(),
@@ -36,10 +34,9 @@ where
             log_store.clone(),
             state_machine_store.clone(),
         )
-        .await
-        .unwrap();
+        .await?;
 
-        P2pRaft {
+        Ok(P2pRaft {
             raft,
             id: node_id,
             store: log_store,
@@ -48,7 +45,7 @@ where
             config,
             signal_tx,
             nodemap: Arc::new(nodemap),
-        }
+        })
     }
 
     // /// NOTE: only run this as leader!

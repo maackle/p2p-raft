@@ -69,7 +69,35 @@ pub enum P2pResponse<C: RaftTypeConfig> {
     P2pError(P2pError),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+impl<C: RaftTypeConfig> P2pResponse<C> {
+    pub fn forward_to_leader(&self) -> Option<Option<(C::NodeId, C::Node)>> {
+        match self {
+            Self::RaftError(e) => e
+                .forward_to_leader()
+                .map(|forward| Some((forward.leader_id.clone()?, forward.leader_node.clone()?))),
+            _ => None,
+        }
+    }
+
+    pub fn to_anyhow(self) -> anyhow::Result<()> {
+        match self {
+            Self::Ok => Ok(()),
+            Self::RaftError(e) => Err(e.into()),
+            Self::P2pError(e) => Err(e.into()),
+        }
+    }
+}
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_more::Error,
+    derive_more::Display,
+)]
 pub enum P2pError {
     NotVoter,
 }

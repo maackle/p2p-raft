@@ -23,11 +23,11 @@ pub struct P2pRaft<C: TypeCfg, N: P2pNetwork<C>> {
     #[deref]
     pub raft: openraft::Raft<C>,
 
-    pub config: Arc<Config>,
     pub id: C::NodeId,
+    pub config: Arc<Config>,
     pub store: p2p_raft_memstore::LogStore<C>,
-    pub tracker: PeerTrackerHandle<C>,
     pub network: N,
+    pub tracker: PeerTrackerHandle<C>,
     pub(crate) signal_tx: Option<SignalSender<C>>,
     pub(crate) nodemap: Arc<dyn Fn(C::NodeId) -> C::Node + Send + Sync + 'static>,
 }
@@ -73,7 +73,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         let results = future::join_all(
             ids.into_iter()
                 .filter(|id| *id != self.id)
-                .map(|id| network.send_p2p(id, P2pRequest::Join)),
+                .map(|id| network.send_rpc(id, P2pRequest::Join)),
         )
         .await;
 
@@ -93,6 +93,18 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         } else {
             anyhow::bail!("failed to join any nodes. All errors: {:?}", errors);
         }
+    }
+
+    pub async fn leave(&self) -> anyhow::Result<()> {
+        self.send_rpc_to_leader_with_retry(P2pRequest::Leave)
+            .await?
+            .to_anyhow()
+    }
+
+    pub async fn propose(&self, data: C::D) -> anyhow::Result<()> {
+        self.send_rpc_to_leader_with_retry(P2pRequest::Propose(data))
+            .await?
+            .to_anyhow()
     }
 
     pub async fn read_log_data(&self) -> anyhow::Result<Vec<C::D>>
@@ -125,6 +137,32 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         self.ensure_linearizable().await?;
         self.raft.client_write(data).await?;
         Ok(())
+    }
+
+    pub async fn send_rpc_to_leader_with_retry(
+        &self,
+        req: P2pRequest<C>,
+    ) -> anyhow::Result<P2pResponse<C>> {
+        let retries = 3;
+        let mut target = self.id.clone();
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        for _ in 0..retries {
+            interval.tick().await;
+            let res = self.network.send_rpc(target.clone(), req.clone()).await?;
+
+            if let Some(forward) = res.forward_to_leader() {
+                if let Some((leader, _node)) = forward {
+                    target = leader;
+                } else {
+                    continue;
+                }
+            } else {
+                return Ok(res);
+            }
+        }
+
+        anyhow::bail!("could not find leader");
     }
 
     pub async fn handle_rpc(
@@ -261,7 +299,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
                 }
 
                 // if there is a leader and I'm not a voter, ask to rejoin the cluster
-                match raft.network.send_p2p(leader, P2pRequest::Join).await {
+                match raft.network.send_rpc(leader, P2pRequest::Join).await {
                     Ok(P2pResponse::Ok) => {}
                     r => {
                         tracing::error!("failed to send join request to leader: {r:?}");

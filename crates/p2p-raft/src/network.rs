@@ -4,7 +4,7 @@ use crate::{message::*, TypeCfg};
 
 #[openraft::add_async_trait]
 pub trait P2pNetwork<C: TypeCfg>: RaftNetworkFactory<C> + Clone + Send + Sync + 'static {
-    async fn send_p2p(
+    async fn send_rpc(
         &self,
         target: C::NodeId,
         req: P2pRequest<C>,

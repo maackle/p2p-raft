@@ -93,6 +93,24 @@ impl Router {
         }
         rafts
     }
+
+    pub async fn new_raft(
+        &self,
+        node_id: NodeId,
+        config: impl Into<Arc<Config>>,
+        signal_tx: Option<SignalSender<TypeConfig>>,
+    ) -> P2pRaft {
+        let node = RouterNode {
+            source: node_id,
+            router: self.clone(),
+        };
+
+        let raft = P2pRaft::create_in_memory(node_id, config, node, signal_tx, |_| ()).await;
+
+        self.lock().targets.insert(node_id, raft.clone());
+
+        raft
+    }
 }
 
 #[derive(Clone, Default)]
