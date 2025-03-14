@@ -7,7 +7,6 @@ use std::time::Duration;
 
 use super::NodeId;
 use super::TypeConfig;
-use openraft::AnyError;
 use parking_lot::Mutex;
 
 use crate::config::Config;
@@ -158,7 +157,7 @@ impl RouterNode {
         &self,
         to: NodeId,
         req: Request<TypeConfig>,
-    ) -> Result<Response<TypeConfig>, AnyError> {
+    ) -> anyhow::Result<Response<TypeConfig>> {
         const LOG_REQ: bool = false;
         const LOG_RESP: bool = false;
 
@@ -179,7 +178,7 @@ impl RouterNode {
                 }
 
                 // can't communicate across partitions
-                return Err(AnyError::error("simulated network partition"));
+                return Err(anyhow::anyhow!("simulated network partition"));
             }
 
             Duration::from_millis(r.latency.get(&(min, max)).cloned().unwrap_or(0) / 2)
@@ -189,9 +188,16 @@ impl RouterNode {
 
         let res = {
             let ding = self.router.lock().targets.get(&to).unwrap().clone();
-            ding.handle_rpc(self.source.clone(), req)
-                .await
-                .map_err(|e| AnyError::new(&e))?
+            match req {
+                Request::P2p(p2p_req) => ding
+                    .handle_p2p_request(self.source.clone(), p2p_req)
+                    .await?
+                    .into(),
+                Request::Raft(raft_req) => ding
+                    .handle_raft_request(self.source.clone(), raft_req)
+                    .await?
+                    .into(),
+            }
         };
 
         tokio::time::sleep(delay).await;

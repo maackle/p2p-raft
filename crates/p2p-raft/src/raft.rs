@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, future::Future, sync::Arc};
 use maplit::btreemap;
 use openraft::{
     alias::ResponderReceiverOf,
-    error::{Fatal, InitializeError, RaftError},
+    error::{InitializeError, RaftError},
     raft::ClientWriteResult,
     ChangeMembers, Entry, EntryPayload, Snapshot,
 };
@@ -35,9 +35,10 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         self.current_leader().await.as_ref() == Some(&self.id)
     }
 
-    pub async fn is_voter(&self, id: &C::NodeId) -> Result<bool, openraft::error::Fatal<C>> {
+    pub async fn is_voter(&self, id: &C::NodeId) -> anyhow::Result<bool> {
         let id = id.clone();
-        self.raft
+        Ok(self
+            .raft
             .with_raft_state(move |s| {
                 s.membership_state
                     .committed()
@@ -45,13 +46,10 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
                     .find(|n| *n == id)
                     .is_some()
             })
-            .await
+            .await?)
     }
 
-    pub async fn initialize(
-        &self,
-        ids: impl IntoIterator<Item = C::NodeId>,
-    ) -> Result<(), RaftError<C, InitializeError<C>>>
+    pub async fn initialize(&self, ids: impl IntoIterator<Item = C::NodeId>) -> anyhow::Result<()>
     where
         BTreeSet<C::NodeId>: openraft::membership::IntoNodes<C::NodeId, C::Node>,
     {
@@ -60,7 +58,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             Ok(_) => Ok(()),
             // this error is ok, it means we got some network messages already
             Err(RaftError::APIError(InitializeError::NotAllowed(_))) => Ok(()),
-            e => e,
+            Err(e) => Err(e.into()),
         }
     }
 
@@ -100,18 +98,18 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         &self,
         from: C::NodeId,
         req: Request<C>,
-    ) -> Result<Response<C>, Fatal<C>> {
+    ) -> anyhow::Result<Response<C>> {
         Ok(match req {
             Request::P2p(p2p_req) => self.handle_p2p_request(from, p2p_req).await?.into(),
             Request::Raft(raft_req) => self.handle_raft_request(from, raft_req).await?.into(),
         })
     }
 
-    async fn handle_raft_request(
+    pub(crate) async fn handle_raft_request(
         &self,
         _from: C::NodeId,
         raft_req: RaftRequest<C>,
-    ) -> Result<RaftResponse<C>, Fatal<C>> {
+    ) -> anyhow::Result<RaftResponse<C>> {
         let res: RaftResponse<C> = match raft_req {
             RaftRequest::Append(req) => {
                 // Send signals
@@ -134,10 +132,9 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
                             _ => None,
                         };
                         if let Some(signal) = signal {
-                            tx.send((self.id.clone(), signal)).await.map_err(|_| {
-                                tracing::error!("failed to send RaftEvent signal. PANIC!");
-                                Fatal::Panicked
-                            })?;
+                            if let Err(e) = tx.send((self.id.clone(), signal)).await {
+                                tracing::warn!("failed to send RaftEvent signal: {e:?}");
+                            }
                         }
                     }
                 }
@@ -176,7 +173,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         &self,
         from: C::NodeId,
         req: P2pRequest<C>,
-    ) -> Result<P2pResponse<C>, Fatal<C>> {
+    ) -> anyhow::Result<P2pResponse<C>> {
         let from_current_voter = self.is_voter(&from).await?;
 
         let res = match req {

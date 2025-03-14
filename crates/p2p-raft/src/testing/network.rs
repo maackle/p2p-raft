@@ -11,6 +11,7 @@ use openraft::raft::AppendEntriesResponse;
 use openraft::raft::SnapshotResponse;
 use openraft::raft::VoteRequest;
 use openraft::raft::VoteResponse;
+use openraft::AnyError;
 use openraft::OptionalSend;
 use openraft::RaftNetworkFactory;
 use openraft::Snapshot;
@@ -71,7 +72,7 @@ impl RaftNetworkV2<TypeConfig> for Connection {
             Ok(resp) => Ok(resp.unwrap_raft().unwrap_append()),
             Err(e) => {
                 tracing::error!("{e:?}");
-                Err(RPCError::Unreachable(Unreachable::new(&e)))
+                Err(RPCError::Unreachable(Unreachable::new(&AnyError::from(e))))
             }
         }
     }
@@ -100,7 +101,9 @@ impl RaftNetworkV2<TypeConfig> for Connection {
             Ok(resp) => Ok(resp.unwrap_raft().unwrap_snapshot()),
             Err(e) => {
                 tracing::error!("{e:?}");
-                Err(StreamingError::Unreachable(Unreachable::new(&e)))
+                Err(StreamingError::Unreachable(Unreachable::new(
+                    &AnyError::from(e),
+                )))
             }
         }
     }
@@ -118,7 +121,7 @@ impl RaftNetworkV2<TypeConfig> for Connection {
             Ok(resp) => Ok(resp.unwrap_raft().unwrap_vote()),
             Err(e) => {
                 tracing::error!("{e:?}");
-                Err(RPCError::Unreachable(Unreachable::new(&e)))
+                Err(RPCError::Unreachable(Unreachable::new(&AnyError::from(e))))
             }
         }
     }

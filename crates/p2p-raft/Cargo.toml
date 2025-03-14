@@ -8,6 +8,7 @@ openraft = { workspace = true }
 openraft-macros = { workspace = true }
 openraft-memstore = { workspace = true }
 
+anyerror = { workspace = true }
 anyhow = { workspace = true }
 derive_more = { workspace = true }
 futures = { workspace = true }

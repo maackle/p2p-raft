@@ -99,6 +99,7 @@ version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71add24cc141a1e8326f249b74c41cfd217aeb2a67c9c6cf9134d175469afd49"
 dependencies = [
+ "anyhow",
  "serde",
 ]
 
@@ -719,6 +720,7 @@ checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 name = "p2p-raft"
 version = "0.1.0"
 dependencies = [
+ "anyerror",
  "anyhow",
  "derive_more",
  "futures",
