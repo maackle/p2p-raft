@@ -12,8 +12,8 @@ use parking_lot::Mutex;
 
 use crate::config::Config;
 use crate::message::P2pRequest;
-use crate::message::RpcRequest;
-use crate::message::RpcResponse;
+use crate::message::Request;
+use crate::message::Response;
 use crate::signal::SignalSender;
 
 type P2pRaft = crate::P2pRaft<TypeConfig, RouterNode>;
@@ -67,7 +67,7 @@ impl Router {
             for m in ids {
                 if m != raft.id {
                     raft.network
-                        .rpc_request(m, P2pRequest::Join.into())
+                        .route(m, P2pRequest::Join.into())
                         .await
                         .unwrap();
                 }
@@ -153,12 +153,12 @@ impl RouterConnections {
 }
 
 impl RouterNode {
-    /// Send raft request `Req` to target node `to`, and wait for response `Result<Resp, RaftError<E>>`.
-    pub async fn rpc_request(
+    /// Route raft request `Req` to target node `to`, and wait for response `Result<Resp, RaftError<E>>`.
+    pub async fn route(
         &self,
         to: NodeId,
-        req: RpcRequest<TypeConfig>,
-    ) -> Result<RpcResponse<TypeConfig>, AnyError> {
+        req: Request<TypeConfig>,
+    ) -> Result<Response<TypeConfig>, AnyError> {
         const LOG_REQ: bool = false;
         const LOG_RESP: bool = false;
 
@@ -189,7 +189,7 @@ impl RouterNode {
 
         let res = {
             let ding = self.router.lock().targets.get(&to).unwrap().clone();
-            ding.handle_request(self.source.clone(), req)
+            ding.handle_rpc(self.source.clone(), req)
                 .await
                 .map_err(|e| AnyError::new(&e))?
         };

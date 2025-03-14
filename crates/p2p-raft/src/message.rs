@@ -6,17 +6,23 @@ use openraft::{
 
 use crate::TypeCfg;
 
+/// An RPC request sent from one node to another.
 #[derive(Debug, derive_more::From, serde::Serialize, serde::Deserialize)]
 #[serde(bound(
     serialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::Serialize",
     deserialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::de::DeserializeOwned"
 ))]
-pub enum RpcRequest<C: TypeCfg> {
+pub enum Request<C: TypeCfg> {
+    /// A raft protocol RPC.
     Raft(RaftRequest<C>),
+
+    /// The extra layer on top of standard Raft provided by this crate.
+    /// These calls must always be handled by the current leader,
+    /// they will fail if handled by a non-leader.
     P2p(P2pRequest<C>),
 }
 
-impl<C: TypeCfg> Clone for RpcRequest<C> {
+impl<C: TypeCfg> Clone for Request<C> {
     fn clone(&self) -> Self {
         match self {
             Self::Raft(r) => Self::Raft(r.clone()),
@@ -25,23 +31,31 @@ impl<C: TypeCfg> Clone for RpcRequest<C> {
     }
 }
 
+/// An RPC response to [`Request`].
 #[derive(Debug, derive_more::From, derive_more::Unwrap, serde::Serialize, serde::Deserialize)]
 #[serde(bound(
     serialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::Serialize",
     deserialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::de::DeserializeOwned"
 ))]
-pub enum RpcResponse<C: RaftTypeConfig> {
+pub enum Response<C: RaftTypeConfig> {
     Raft(RaftResponse<C>),
     P2p(P2pResponse<C>),
 }
 
+/// Request that the leader modify the log on your behalf.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum P2pRequest<C: RaftTypeConfig> {
+    /// Propose a new value to the raft cluster.
     Propose(C::D),
+
+    /// Join the raft cluster.
     Join,
+
+    /// Leave the raft cluster.
     Leave,
 }
 
+/// Response to a [`P2pRequest`].
 #[derive(
     Clone, Debug, PartialEq, Eq, derive_more::Unwrap, serde::Serialize, serde::Deserialize,
 )]

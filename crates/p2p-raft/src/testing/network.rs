@@ -65,7 +65,7 @@ impl RaftNetworkV2<TypeConfig> for Connection {
     ) -> Result<AppendEntriesResponse<TypeConfig>, RPCError<TypeConfig>> {
         match self
             .router
-            .rpc_request(self.target, RaftRequest::Append(req).into())
+            .route(self.target, RaftRequest::Append(req).into())
             .await
         {
             Ok(resp) => Ok(resp.unwrap_raft().unwrap_append()),
@@ -86,7 +86,7 @@ impl RaftNetworkV2<TypeConfig> for Connection {
     ) -> Result<SnapshotResponse<TypeConfig>, StreamingError<TypeConfig>> {
         match self
             .router
-            .rpc_request(
+            .route(
                 self.target,
                 RaftRequest::Snapshot {
                     vote,
@@ -112,7 +112,7 @@ impl RaftNetworkV2<TypeConfig> for Connection {
     ) -> Result<VoteResponse<TypeConfig>, RPCError<TypeConfig>> {
         match self
             .router
-            .rpc_request(self.target, RaftRequest::Vote(req).into())
+            .route(self.target, RaftRequest::Vote(req).into())
             .await
         {
             Ok(resp) => Ok(resp.unwrap_raft().unwrap_vote()),

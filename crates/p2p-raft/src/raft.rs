@@ -10,9 +10,7 @@ use openraft::{
 
 use crate::{
     config::Config,
-    message::{
-        P2pError, P2pRequest, P2pResponse, RaftRequest, RaftResponse, RpcRequest, RpcResponse,
-    },
+    message::{P2pError, P2pRequest, P2pResponse, RaftRequest, RaftResponse, Request, Response},
     network::P2pNetwork,
     signal::{RaftEvent, SignalSender},
     PeerTrackerHandle, TypeCfg,
@@ -98,14 +96,14 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         Ok(())
     }
 
-    pub async fn handle_request(
+    pub async fn handle_rpc(
         &self,
         from: C::NodeId,
-        req: RpcRequest<C>,
-    ) -> Result<RpcResponse<C>, Fatal<C>> {
+        req: Request<C>,
+    ) -> Result<Response<C>, Fatal<C>> {
         Ok(match req {
-            RpcRequest::P2p(p2p_req) => self.handle_p2p_request(from, p2p_req).await?.into(),
-            RpcRequest::Raft(raft_req) => self.handle_raft_request(from, raft_req).await?.into(),
+            Request::P2p(p2p_req) => self.handle_p2p_request(from, p2p_req).await?.into(),
+            Request::Raft(raft_req) => self.handle_raft_request(from, raft_req).await?.into(),
         })
     }
 
