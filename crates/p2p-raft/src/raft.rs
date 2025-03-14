@@ -233,11 +233,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
                 }
 
                 // if there is a leader and I'm not a voter, ask to rejoin the cluster
-                match raft
-                    .network
-                    .send_p2p(source.clone(), leader, P2pRequest::Join)
-                    .await
-                {
+                match raft.network.send_p2p(leader, P2pRequest::Join).await {
                     Ok(P2pResponse::Ok) => {}
                     r => {
                         tracing::error!("failed to send join request to leader: {r:?}");

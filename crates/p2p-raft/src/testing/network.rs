@@ -42,16 +42,19 @@ impl RaftNetworkFactory<TypeConfig> for RouterNode {
 }
 
 impl P2pNetwork<TypeConfig> for RouterNode {
+    fn local_node_id(&self) -> NodeId {
+        self.source
+    }
+
     async fn send_p2p(
         &self,
-        source: NodeId,
         target: NodeId,
         req: P2pRequest<TypeConfig>,
-    ) -> Result<P2pResponse<TypeConfig>, RPCError<TypeConfig>> {
+    ) -> anyhow::Result<P2pResponse<TypeConfig>> {
         let tgt = self.router.lock().targets.get(&target).unwrap().clone();
-        tgt.handle_p2p_request(source.clone(), req)
+        tgt.handle_p2p_request(self.local_node_id(), req)
             .await
-            .map_err(|e| RPCError::Unreachable(Unreachable::new(&e)))
+            .map_err(Into::into)
     }
 }
 impl RaftNetworkV2<TypeConfig> for Connection {

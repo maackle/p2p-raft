@@ -1,4 +1,4 @@
-use openraft::{error::RPCError, RaftNetworkFactory};
+use openraft::RaftNetworkFactory;
 
 use crate::{message::*, TypeCfg};
 
@@ -6,8 +6,9 @@ use crate::{message::*, TypeCfg};
 pub trait P2pNetwork<C: TypeCfg>: RaftNetworkFactory<C> + Clone + Send + Sync + 'static {
     async fn send_p2p(
         &self,
-        source: C::NodeId,
         target: C::NodeId,
         req: P2pRequest<C>,
-    ) -> Result<P2pResponse<C>, RPCError<C>>;
+    ) -> anyhow::Result<P2pResponse<C>>;
+
+    fn local_node_id(&self) -> C::NodeId;
 }
