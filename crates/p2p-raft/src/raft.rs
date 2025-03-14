@@ -88,7 +88,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             .collect_vec();
 
         // Only error if we had no successes at all
-        if errors.len() < num_results {
+        if errors.is_empty() || errors.len() < num_results {
             Ok(())
         } else {
             anyhow::bail!("failed to join any nodes. All errors: {:?}", errors);
@@ -144,21 +144,25 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         req: P2pRequest<C>,
     ) -> anyhow::Result<P2pResponse<C>> {
         let retries = 3;
-        let mut target = self.id.clone();
+        let mut target = self.current_leader().await;
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         for _ in 0..retries {
             interval.tick().await;
-            let res = self.network.send_rpc(target.clone(), req.clone()).await?;
 
-            if let Some(forward) = res.forward_to_leader() {
-                if let Some((leader, _node)) = forward {
-                    target = leader;
+            if let Some(leader) = target.clone() {
+                let res = self.network.send_rpc(leader, req.clone()).await?;
+                if let Some(forward) = res.forward_to_leader() {
+                    if let Some((leader, _node)) = forward {
+                        target = Some(leader);
+                    } else {
+                        target = self.current_leader().await;
+                    }
                 } else {
-                    continue;
+                    return Ok(res);
                 }
             } else {
-                return Ok(res);
+                target = self.current_leader().await;
             }
         }
 

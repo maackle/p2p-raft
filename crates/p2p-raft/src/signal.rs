@@ -33,3 +33,5 @@ pub enum RaftEvent<C: TypeCfg> {
 // }
 
 pub type SignalSender<C> = tokio::sync::mpsc::Sender<(<C as RaftTypeConfig>::NodeId, RaftEvent<C>)>;
+pub type SignalReceiver<C> =
+    tokio::sync::mpsc::Receiver<(<C as RaftTypeConfig>::NodeId, RaftEvent<C>)>;

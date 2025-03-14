@@ -18,7 +18,7 @@ pub use raft::P2pRaft;
 #[cfg(feature = "memstore")]
 pub mod mem;
 #[cfg(feature = "memstore")]
-pub use p2p_raft_memstore::{LogStore, StateMachineData, StateMachineStore};
+pub use p2p_raft_memstore::{ArcStateMachineStore, LogStore, StateMachineData, StateMachineStore};
 
 /// Extra trait bounds on RaftTypeConfig which are generally required by this crate.
 pub trait TypeCfg:
