@@ -10,7 +10,7 @@ impl Config {
     pub fn testing(heartbeat: u64) -> Self {
         let mut config = Self::default();
         config.p2p_config.join_interval = Duration::from_millis(heartbeat * 6);
-        config.p2p_config.responsive_interval = Duration::from_millis(heartbeat * 6);
+        config.p2p_config.responsive_interval = Duration::from_millis(heartbeat * 10);
 
         config.raft_config.heartbeat_interval = heartbeat;
         config.raft_config.election_timeout_min = heartbeat * 3;

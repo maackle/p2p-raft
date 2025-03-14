@@ -151,15 +151,23 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             interval.tick().await;
 
             if let Some(leader) = target.clone() {
-                let res = self.network.send_rpc(leader, req.clone()).await?;
-                if let Some(forward) = res.forward_to_leader() {
-                    if let Some((leader, _node)) = forward {
-                        target = Some(leader);
-                    } else {
-                        target = self.current_leader().await;
-                    }
+                if leader == self.id {
+                    return Ok(self
+                        .handle_rpc(self.id.clone(), req.clone().into())
+                        .await?
+                        .unwrap_p_2_p());
                 } else {
-                    return Ok(res);
+                    let res = self.network.send_rpc(leader, req.clone()).await?;
+
+                    if let Some(forward) = res.forward_to_leader() {
+                        if let Some((leader, _node)) = forward {
+                            target = Some(leader);
+                        } else {
+                            target = self.current_leader().await;
+                        }
+                    } else {
+                        return Ok(res);
+                    }
                 }
             } else {
                 target = self.current_leader().await;

@@ -74,7 +74,7 @@ async fn shrink_and_grow_and_shrink() {
 
     const NUM_PEERS: u64 = 5;
 
-    let mut router = Router::new(Config::testing(50), None);
+    let mut router = Router::new(Config::testing(100), None);
     let rafts = router.add_nodes(0..NUM_PEERS).await;
     router.initialize_nodes().await;
 
