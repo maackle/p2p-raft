@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use itertools::Itertools;
 use p2p_raft::{testing::*, Config};
 
 #[tokio::test(flavor = "multi_thread")]
@@ -117,7 +118,7 @@ async fn shrink_and_grow_and_shrink() {
 
     // - one of the originally partitioned nodes will eventually have the full log
     {
-        let log = rafts[0].read_log_data().await.unwrap();
+        let log = rafts[0].read_log_data(0).await.unwrap();
         println!("log: {log:?}");
         assert_eq!(log, vec![0, 1, 2, 3, 4, 5]);
     }

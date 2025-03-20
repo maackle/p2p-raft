@@ -22,7 +22,7 @@ async fn test_snapshot() {
 
     sleep(3_000).await;
 
-    let log = rafts[leader].read_log_data().await.unwrap();
+    let log = rafts[leader].read_log_data(0).await.unwrap();
     println!("log: {log:?}");
     assert_eq!(log, vec![5, 4, 3, 2, 1]);
 }

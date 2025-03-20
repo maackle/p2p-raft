@@ -105,7 +105,7 @@ impl Router {
             router: self.clone(),
         };
 
-        let raft = P2pRaft::create_in_memory(node_id, config, node, signal_tx, |_| ())
+        let raft = P2pRaft::spawn_memory(node_id, config, node, signal_tx, |_| ())
             .await
             .unwrap();
 

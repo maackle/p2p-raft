@@ -24,7 +24,8 @@ pub use p2p_raft_memstore::{ArcStateMachineStore, LogStore, StateMachineData, St
 pub trait TypeCfg:
     RaftTypeConfig<
     D: std::fmt::Debug + Clone + Eq + Ord + serde::Serialize + serde::de::DeserializeOwned,
-    R: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
+    R = (),
+    // R: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
     Vote: Clone + serde::Serialize + serde::de::DeserializeOwned,
     LeaderId: Clone + serde::Serialize + serde::de::DeserializeOwned,
     SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,

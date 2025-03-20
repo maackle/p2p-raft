@@ -9,43 +9,30 @@ use super::*;
 
 impl<C, N: P2pNetwork<C>> P2pRaft<C, N>
 where
-    C: TypeCfg,
+    C: TypeCfg<SnapshotData = p2p_raft_memstore::StateMachineData<C>>,
     ArcStateMachineStore<C>: RaftStateMachine<C>,
 {
     /// Create a new raft instance with in-memory storage and a trivial state machine.
-    pub async fn create_in_memory(
+    pub async fn spawn_memory(
         node_id: NodeIdOf<C>,
         config: impl Into<Arc<Config>>,
         network: N,
         signal_tx: Option<SignalSender<C>>,
         nodemap: impl Fn(C::NodeId) -> C::Node + Send + Sync + 'static,
     ) -> anyhow::Result<Self> {
-        let config = config.into();
-
         let log_store = LogStore::default();
+        let state_machine_store = p2p_raft_memstore::StateMachineStore::default();
 
-        let state_machine_store =
-            ArcStateMachineStore::from(Arc::new(p2p_raft_memstore::StateMachineStore::default()));
-
-        let raft = openraft::Raft::new(
-            node_id.clone(),
-            config.raft_config.clone().into(),
-            network.clone(),
-            log_store.clone(),
-            state_machine_store.clone(),
-        )
-        .await?;
-
-        Ok(P2pRaft {
-            raft,
-            id: node_id,
-            store: log_store,
-            tracker: PeerTrackerHandle::new(),
-            network,
+        Ok(P2pRaft::spawn(
+            node_id,
             config,
+            log_store,
+            state_machine_store,
+            network,
             signal_tx,
-            nodemap: Arc::new(nodemap),
-        })
+            nodemap,
+        )
+        .await?)
     }
 
     // /// NOTE: only run this as leader!

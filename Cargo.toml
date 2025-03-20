@@ -16,6 +16,7 @@ parking_lot = "*"
 rand = { version = "0.9" }
 serde = "*"
 tokio = { version = "1.0", features = ["full"] }
+tokio-util = "*"
 tracing = "*"
 tracing-subscriber = { version = "*", features = ["env-filter"] }
 

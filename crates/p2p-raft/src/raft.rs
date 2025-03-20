@@ -6,9 +6,12 @@ use maplit::btreemap;
 use openraft::{
     alias::{LogIdOf, ResponderReceiverOf},
     error::{ClientWriteError, InitializeError, RaftError},
+    metrics::WaitError,
     raft::ClientWriteResult,
     ChangeMembers, Entry, EntryPayload, Snapshot,
 };
+use p2p_raft_memstore::ArcStateMachineStore;
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     config::Config,
@@ -28,11 +31,63 @@ pub struct P2pRaft<C: TypeCfg, N: P2pNetwork<C>> {
     pub store: p2p_raft_memstore::LogStore<C>,
     pub network: N,
     pub tracker: PeerTrackerHandle<C>,
-    pub(crate) signal_tx: Option<SignalSender<C>>,
+    // pub(crate) signal_tx: Option<SignalSender<C>>,
     pub(crate) nodemap: Arc<dyn Fn(C::NodeId) -> C::Node + Send + Sync + 'static>,
+
+    cancel: CancellationToken,
 }
 
 impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
+    pub async fn spawn(
+        node_id: C::NodeId,
+        config: impl Into<Arc<Config>>,
+        log_store: p2p_raft_memstore::LogStore<C>,
+        state_machine_store: p2p_raft_memstore::StateMachineStore<C>,
+        network: N,
+        signal_tx: Option<SignalSender<C>>,
+        nodemap: impl Fn(C::NodeId) -> C::Node + Send + Sync + 'static,
+    ) -> anyhow::Result<Self>
+    where
+        C: TypeCfg<R = (), Entry = Entry<C>, SnapshotData = p2p_raft_memstore::StateMachineData<C>>,
+    {
+        let cancel = CancellationToken::new();
+        let config = config.into();
+
+        let raft = openraft::Raft::new(
+            node_id.clone(),
+            config.raft_config.clone().into(),
+            network.clone(),
+            log_store.clone(),
+            ArcStateMachineStore::from(Arc::new(state_machine_store)),
+        )
+        .await?;
+
+        let raft = Self {
+            raft,
+            id: node_id,
+            config,
+            store: log_store,
+            network,
+            tracker: PeerTrackerHandle::new(),
+            // signal_tx
+            nodemap: Arc::new(nodemap),
+            cancel,
+        };
+
+        {
+            let token = raft.cancel.clone();
+            let chores = raft.clone().chore_loop();
+            tokio::spawn(async move { token.run_until_cancelled(chores).await });
+        }
+        if let Some(tx) = signal_tx {
+            let token = raft.cancel.clone();
+            let chores = raft.clone().signal_loop(tx);
+            tokio::spawn(async move { token.run_until_cancelled(chores).await });
+        }
+
+        Ok(raft)
+    }
+
     pub async fn is_leader(&self) -> bool {
         self.current_leader().await.as_ref() == Some(&self.id)
     }
@@ -107,7 +162,37 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             .to_anyhow()
     }
 
-    pub async fn read_log_data(&self) -> anyhow::Result<Vec<C::D>>
+    pub async fn read_log_data(&self, start_index: u64) -> anyhow::Result<Vec<C::D>>
+    where
+        C: TypeCfg<Entry = Entry<C>>,
+    {
+        Ok(self
+            .read_log_ops(start_index)
+            .await?
+            .into_iter()
+            .map(|i| i.op)
+            .collect_vec())
+    }
+
+    pub async fn read_log_ops(&self, start_index: u64) -> anyhow::Result<Vec<LogOp<C>>>
+    where
+        C: TypeCfg<Entry = Entry<C>>,
+    {
+        Ok(self
+            .read_log_entries(start_index)
+            .await?
+            .into_iter()
+            .filter_map(|e: Entry<C>| match e.payload {
+                EntryPayload::Normal(n) => Some(LogOp {
+                    log_id: e.log_id.clone(),
+                    op: n.clone(),
+                }),
+                _ => None,
+            })
+            .collect::<Vec<_>>())
+    }
+
+    pub async fn read_log_entries(&self, start_index: u64) -> anyhow::Result<Vec<C::Entry>>
     where
         C: TypeCfg<Entry = Entry<C>>,
     {
@@ -119,14 +204,8 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             .clone()
             .get_log_reader()
             .await
-            .try_get_log_entries(..)
-            .await?
-            .into_iter()
-            .filter_map(|e: Entry<C>| match e.payload {
-                EntryPayload::Normal(n) => Some(n),
-                _ => None,
-            })
-            .collect::<Vec<_>>())
+            .try_get_log_entries(start_index..)
+            .await?)
     }
 
     pub async fn write_data(
@@ -135,22 +214,22 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
     ) -> Result<LogIdOf<C>, RaftError<C, ClientWriteError<C>>> {
         let r = self.raft.client_write(data.clone()).await?;
 
-        // Send signal.
-        // TODO: avoid clone, and ideally this signal should only be emitted from one place
-        if let Some(tx) = self.signal_tx.as_ref() {
-            if let Err(e) = tx
-                .send((
-                    self.id.clone(),
-                    RaftEvent::EntryCommitted {
-                        log_id: r.log_id.clone(),
-                        data: data.clone(),
-                    },
-                ))
-                .await
-            {
-                tracing::warn!("failed to send RaftEvent signal: {e:?}");
-            }
-        }
+        // // Send signal.
+        // // TODO: avoid clone, and ideally this signal should only be emitted from one place
+        // if let Some(tx) = self.signal_tx.as_ref() {
+        //     if let Err(e) = tx
+        //         .send((
+        //             self.id.clone(),
+        //             RaftEvent::EntryCommitted {
+        //                 log_id: r.log_id.clone(),
+        //                 data: data.clone(),
+        //             },
+        //         ))
+        //         .await
+        //     {
+        //         tracing::warn!("failed to send RaftEvent signal: {e:?}");
+        //     }
+        // }
         Ok(r.log_id)
     }
 
@@ -280,13 +359,13 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         _from: C::NodeId,
         raft_req: RaftRequest<C>,
     ) -> anyhow::Result<RaftResponse<C>> {
-        if let Some(tx) = self.signal_tx.as_ref() {
-            for event in self.generate_raft_events(&raft_req).await {
-                if let Err(e) = tx.send((self.id.clone(), event)).await {
-                    tracing::warn!("failed to send RaftEvent signal: {e:?}");
-                }
-            }
-        }
+        // if let Some(tx) = self.signal_tx.as_ref() {
+        //     for event in self.generate_raft_events(&raft_req).await {
+        //         if let Err(e) = tx.send((self.id.clone(), event)).await {
+        //             tracing::warn!("failed to send RaftEvent signal: {e:?}");
+        //         }
+        //     }
+        // }
 
         let res: RaftResponse<C> = match raft_req {
             RaftRequest::Append(req) => match self.append_entries(req).await {
@@ -361,18 +440,18 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             }
         };
 
-        if res.is_ok() {
-            if let Some(tx) = self.signal_tx.as_ref() {
-                let events = self.generate_p2p_events(&req, &res).await;
-                for event in events {
-                    if let Err(e) = tx.send((self.id.clone(), event)).await {
-                        tracing::warn!("failed to send RaftEvent signal: {e:?}");
-                    }
-                }
-            }
-        } else {
-            tracing::debug!("no signals sent because response is error");
-        }
+        // if res.is_ok() {
+        //     if let Some(tx) = self.signal_tx.as_ref() {
+        //         let events = self.generate_p2p_events(&req, &res).await;
+        //         for event in events {
+        //             if let Err(e) = tx.send((self.id.clone(), event)).await {
+        //                 tracing::warn!("failed to send RaftEvent signal: {e:?}");
+        //             }
+        //         }
+        //     }
+        // } else {
+        //     tracing::debug!("no signals sent because response is error");
+        // }
 
         Ok(res)
     }
@@ -410,6 +489,73 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             }
         }
     }
+
+    pub async fn signal_loop(self, signal_tx: SignalSender<C>) {
+        let mut index = 0;
+        loop {
+            match self
+                .raft
+                .wait(None)
+                .log_index_at_least(Some(index), "log has grown")
+                .await
+            {
+                Ok(metrics) => match self.read_log_entries(index).await {
+                    Ok(entries) => {
+                        debug_assert!(entries.len() > 0);
+                        if let Some(last) = entries.last() {
+                            debug_assert_eq!(metrics.last_log_index, Some(last.log_id.index));
+                            index = last.log_id.index + 1;
+                        }
+                        for entry in entries {
+                            if let Some(event) = self.event_from_op(entry) {
+                                if let Err(e) = signal_tx.send((self.id.clone(), event)).await {
+                                    tracing::warn!("failed to send RaftEvent signal: {e:?}");
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("failed to read log data: {e:?}");
+                    }
+                },
+                Err(WaitError::ShuttingDown) => {
+                    break;
+                }
+                Err(WaitError::Timeout(_, _)) => {
+                    unreachable!()
+                }
+            }
+        }
+    }
+
+    fn event_from_op(&self, e: C::Entry) -> Option<RaftEvent<C>> {
+        match &e.payload {
+            EntryPayload::Normal(data) => Some(RaftEvent::EntryCommitted {
+                log_id: e.log_id.clone(),
+                data: data.clone(),
+            }),
+            EntryPayload::Membership(m) => {
+                // only send membership signals if the membership is not in a joint config
+                let enabled = self.config.p2p_config.unstable_membership_signals;
+                let stable_config = m.get_joint_config().len() <= 1;
+                (enabled && stable_config).then(|| RaftEvent::MembershipChanged {
+                    log_id: e.log_id.clone(),
+                    members: m.voter_ids().collect::<BTreeSet<_>>(),
+                })
+            }
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(bound(
+    serialize = "<C as openraft::RaftTypeConfig>::D: serde::Serialize",
+    deserialize = "<C as openraft::RaftTypeConfig>::D: serde::de::DeserializeOwned"
+))]
+pub struct LogOp<C: TypeCfg> {
+    pub log_id: LogIdOf<C>,
+    pub op: C::D,
 }
 
 #[cfg(feature = "testing")]
@@ -433,7 +579,7 @@ where
             .await
             .unwrap();
 
-        let log = self.read_log_data().await;
+        let log = self.read_log_ops(0).await;
         let snapshot = self
             .raft
             .get_snapshot()
@@ -452,5 +598,11 @@ where
         ];
 
         lines.into_iter().join(" ")
+    }
+}
+
+impl<C: TypeCfg, N: P2pNetwork<C>> Drop for P2pRaft<C, N> {
+    fn drop(&mut self) {
+        self.cancel.cancel();
     }
 }
