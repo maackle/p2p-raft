@@ -31,7 +31,6 @@ pub struct P2pRaft<C: TypeCfg, N: P2pNetwork<C>> {
     pub store: p2p_raft_memstore::LogStore<C>,
     pub network: N,
     pub tracker: PeerTrackerHandle<C>,
-    // pub(crate) signal_tx: Option<SignalSender<C>>,
     pub(crate) nodemap: Arc<dyn Fn(C::NodeId) -> C::Node + Send + Sync + 'static>,
 
     cancel: CancellationToken,
@@ -69,7 +68,6 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             store: log_store,
             network,
             tracker: PeerTrackerHandle::new(),
-            // signal_tx
             nodemap: Arc::new(nodemap),
             cancel,
         };
@@ -213,23 +211,6 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         data: C::D,
     ) -> Result<LogIdOf<C>, RaftError<C, ClientWriteError<C>>> {
         let r = self.raft.client_write(data.clone()).await?;
-
-        // // Send signal.
-        // // TODO: avoid clone, and ideally this signal should only be emitted from one place
-        // if let Some(tx) = self.signal_tx.as_ref() {
-        //     if let Err(e) = tx
-        //         .send((
-        //             self.id.clone(),
-        //             RaftEvent::EntryCommitted {
-        //                 log_id: r.log_id.clone(),
-        //                 data: data.clone(),
-        //             },
-        //         ))
-        //         .await
-        //     {
-        //         tracing::warn!("failed to send RaftEvent signal: {e:?}");
-        //     }
-        // }
         Ok(r.log_id)
     }
 
@@ -316,14 +297,6 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         _from: C::NodeId,
         raft_req: RaftRequest<C>,
     ) -> anyhow::Result<RaftResponse<C>> {
-        // if let Some(tx) = self.signal_tx.as_ref() {
-        //     for event in self.generate_raft_events(&raft_req).await {
-        //         if let Err(e) = tx.send((self.id.clone(), event)).await {
-        //             tracing::warn!("failed to send RaftEvent signal: {e:?}");
-        //         }
-        //     }
-        // }
-
         let res: RaftResponse<C> = match raft_req {
             RaftRequest::Append(req) => match self.append_entries(req).await {
                 Ok(r) => Ok(r.into()),
@@ -404,7 +377,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         self.cancel.cancel();
     }
 
-    pub async fn chore_loop(self) {
+    async fn chore_loop(self) {
         let source = self.id.clone();
         let raft = self.clone();
 
@@ -438,7 +411,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         }
     }
 
-    pub async fn signal_loop(self, signal_tx: SignalSender<C>) {
+    async fn signal_loop(self, signal_tx: SignalSender<C>) {
         let mut index = 0;
         loop {
             match self

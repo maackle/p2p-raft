@@ -48,7 +48,6 @@ impl Router {
         let rafts = self.rafts();
         let all_ids = rafts.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
         for (_, raft) in rafts.iter().enumerate() {
-            let _ = tokio::spawn(raft.clone().chore_loop());
             raft.initialize(all_ids.clone()).await.unwrap();
             println!("initialized {}.", raft.id);
         }
@@ -59,7 +58,6 @@ impl Router {
         let all_ids = rafts.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
 
         for (n, raft) in rafts.iter().enumerate() {
-            let _ = tokio::spawn(raft.clone().chore_loop());
             let ids = all_ids[0..=n].to_vec();
             raft.initialize(ids.clone()).await.unwrap();
             raft.broadcast_join(ids.clone()).await.unwrap();
