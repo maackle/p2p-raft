@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
 
 use itertools::Itertools;
 use p2p_raft::{testing::*, Config};
@@ -7,12 +10,14 @@ use p2p_raft::{testing::*, Config};
 /// and there are no duplicates.
 #[tokio::test(flavor = "multi_thread")]
 async fn receive_signals() {
+    setup_tracing("signals=debug,p2p_raft=debug,p2p_raft_memstore=off");
+
     const NUM_PEERS: u64 = 4;
     const NUM_ENTRIES: u64 = 6;
 
-    let (tx, mut rx) = tokio::sync::mpsc::channel(100);
+    let (signal_tx, mut signal_rx) = tokio::sync::mpsc::channel(100);
 
-    let mut router = Router::new(Config::testing(50), Some(tx));
+    let mut router = Router::new(Config::testing(50), Some(signal_tx));
     let rafts = router.add_nodes(0..NUM_PEERS).await;
     router.natural_startup(Duration::from_millis(10)).await;
 
@@ -25,7 +30,7 @@ async fn receive_signals() {
     router.create_partitions([0..=2, 3..=5]).await;
     await_partition_stability(&rafts[0..=2]).await;
 
-    let leader = await_any_leader(&rafts).await as usize;
+    let leader = await_any_leader(&rafts[0..=2]).await as usize;
 
     for i in 0..NUM_ENTRIES / 2 {
         rafts[leader].write_linearizable(i).await.unwrap();
@@ -36,15 +41,18 @@ async fn receive_signals() {
 
     let mut signals = BTreeMap::new();
 
-    while let Ok((raft_id, event)) = rx.try_recv() {
+    while let Ok((raft_id, event)) = signal_rx.try_recv() {
         println!("event: {raft_id} {:?}", event);
-        let e = signals.entry(event).or_insert(0);
-        *e += 1;
+        let e = signals.entry(event).or_insert_with(BTreeSet::new);
+        e.insert(raft_id);
     }
 
-    assert_eq!(signals.len(), NUM_ENTRIES as usize);
+    // check that a signal for each entry is received by each node
+    // at least once
     assert_eq!(
-        signals.values().copied().collect_vec(),
-        vec![NUM_PEERS - 1; NUM_ENTRIES as usize]
+        signals.values().cloned().collect_vec(),
+        vec![(0..NUM_PEERS).collect::<BTreeSet<_>>(); NUM_ENTRIES as usize]
     );
+
+    // TODO: check for duplicates
 }

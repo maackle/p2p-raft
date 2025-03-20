@@ -17,15 +17,20 @@ rand = { version = "0.9" }
 serde = "*"
 tokio = { version = "1.0", features = ["full"] }
 tracing = "*"
-tracing-mutex = { version = "*", features = ["parkinglot"] }
-tracing-subscriber = "*"
+tracing-subscriber = { version = "*", features = ["env-filter"] }
 
 anyerror = { version = "*", features = ["anyhow"] }
 
-openraft = { git = "https://github.com/maackle/openraft", branch = "adapt-v1-feature", features = [
+openraft = { git = "https://github.com/databendlabs/openraft", default-features = false, features = [
+  "tokio-rt",
   "type-alias",
 ] }
-openraft-macros = { git = "https://github.com/maackle/openraft", branch = "adapt-v1-feature" }
-openraft-memstore = { git = "https://github.com/maackle/openraft", branch = "adapt-v1-feature" }
+openraft-macros = { git = "https://github.com/databendlabs/openraft" }
+openraft-memstore = { git = "https://github.com/databendlabs/openraft" }
 
 p2p-raft-memstore = { path = "crates/p2p-raft-memstore" }
+
+[patch."https://github.com/databendlabs/openraft"]
+openraft = { path = "/home/michael/gitfork/openraft/openraft" }
+openraft-macros = { path = "/home/michael/gitfork/openraft/macros" }
+openraft-memstore = { path = "/home/michael/gitfork/openraft/stores/memstore" }

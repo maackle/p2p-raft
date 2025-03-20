@@ -22,6 +22,15 @@ pub enum RaftEvent<C: TypeCfg> {
     },
 }
 
+impl<C: TypeCfg> RaftEvent<C> {
+    pub fn log_id(&self) -> &LogId<C> {
+        match self {
+            RaftEvent::EntryCommitted { log_id, .. } => log_id,
+            RaftEvent::MembershipChanged { log_id, .. } => log_id,
+        }
+    }
+}
+
 // #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 // #[serde(bound(
 //     serialize = "<C as openraft::RaftTypeConfig>::D: serde::Serialize",

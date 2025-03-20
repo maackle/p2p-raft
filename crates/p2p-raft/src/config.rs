@@ -32,6 +32,9 @@ pub struct P2pConfig {
     /// If true, the node will send membership signals.
     /// False by default, because this is currently unstable.
     pub unstable_membership_signals: bool,
+
+    /// Timeout for requests to other nodes.
+    pub request_timeout: Duration,
 }
 
 impl Default for P2pConfig {
@@ -39,6 +42,7 @@ impl Default for P2pConfig {
         Self {
             responsive_interval: Duration::from_millis(3000),
             join_interval: Duration::from_millis(3000),
+            request_timeout: Duration::from_millis(5000),
             unstable_membership_signals: false,
         }
     }

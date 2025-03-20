@@ -137,3 +137,12 @@ where
 pub async fn sleep(ms: u64) {
     tokio::time::sleep(Duration::from_millis(ms)).await;
 }
+
+pub fn setup_tracing(directive: &str) {
+    tracing_subscriber::fmt::fmt()
+        .with_file(true)
+        .with_line_number(true)
+        // .with_max_level(Level::DEBUG)
+        .with_env_filter(tracing_subscriber::EnvFilter::try_new(directive).unwrap())
+        .init();
+}

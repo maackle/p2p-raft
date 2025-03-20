@@ -4,8 +4,8 @@ use futures::future;
 use itertools::Itertools;
 use maplit::btreemap;
 use openraft::{
-    alias::ResponderReceiverOf,
-    error::{InitializeError, RaftError},
+    alias::{LogIdOf, ResponderReceiverOf},
+    error::{ClientWriteError, InitializeError, RaftError},
     raft::ClientWriteResult,
     ChangeMembers, Entry, EntryPayload, Snapshot,
 };
@@ -129,13 +129,38 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             .collect::<Vec<_>>())
     }
 
+    pub async fn write_data(
+        &self,
+        data: C::D,
+    ) -> Result<LogIdOf<C>, RaftError<C, ClientWriteError<C>>> {
+        let r = self.raft.client_write(data.clone()).await?;
+
+        // Send signal.
+        // TODO: avoid clone, and ideally this signal should only be emitted from one place
+        if let Some(tx) = self.signal_tx.as_ref() {
+            if let Err(e) = tx
+                .send((
+                    self.id.clone(),
+                    RaftEvent::EntryCommitted {
+                        log_id: r.log_id.clone(),
+                        data: data.clone(),
+                    },
+                ))
+                .await
+            {
+                tracing::warn!("failed to send RaftEvent signal: {e:?}");
+            }
+        }
+        Ok(r.log_id)
+    }
+
     pub async fn write_linearizable<E>(&self, data: C::D) -> anyhow::Result<()>
     where
         ResponderReceiverOf<C>: Future<Output = Result<ClientWriteResult<C>, E>>,
         E: std::error::Error + openraft::OptionalSend,
     {
         self.ensure_linearizable().await?;
-        self.raft.client_write(data).await?;
+        self.write_data(data).await?;
         Ok(())
     }
 
@@ -144,37 +169,53 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         req: P2pRequest<C>,
     ) -> anyhow::Result<P2pResponse<C>> {
         let retries = 3;
-        let mut target = self.current_leader().await;
+        let mut leader = self.try_current_leader().await?;
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        for _ in 0..retries {
+        for i in 0..retries {
+            tracing::info!("retry {i}, leader={leader:?}");
+
             interval.tick().await;
 
-            if let Some(leader) = target.clone() {
-                if leader == self.id {
-                    return Ok(self
-                        .handle_rpc(self.id.clone(), req.clone().into())
-                        .await?
-                        .unwrap_p_2_p());
-                } else {
-                    let res = self.network.send_rpc(leader, req.clone()).await?;
-
-                    if let Some(forward) = res.forward_to_leader() {
-                        if let Some((leader, _node)) = forward {
-                            target = Some(leader);
-                        } else {
-                            target = self.current_leader().await;
-                        }
-                    } else {
-                        return Ok(res);
-                    }
-                }
+            if leader == self.id {
+                return Ok(self
+                    .handle_rpc(self.id.clone(), req.clone().into())
+                    .await?
+                    .unwrap_p_2_p());
             } else {
-                target = self.current_leader().await;
+                let res = match tokio::time::timeout(
+                    self.config.p2p_config.request_timeout,
+                    self.network.send_rpc(leader, req.clone()),
+                )
+                .await
+                {
+                    Ok(r) => r?,
+                    Err(_) => {
+                        tracing::error!("request timed out");
+                        anyhow::bail!("request timed out")
+                    }
+                };
+
+                if let Some(forward) = res.forward_to_leader() {
+                    if let Some((new_leader, _node)) = forward {
+                        leader = new_leader;
+                    } else {
+                        leader = self.try_current_leader().await?;
+                    }
+                } else {
+                    return Ok(res);
+                }
             }
         }
 
         anyhow::bail!("could not find leader");
+    }
+
+    async fn try_current_leader(&self) -> anyhow::Result<C::NodeId> {
+        match self.current_leader().await {
+            Some(leader) => Ok(leader),
+            None => anyhow::bail!("no leader available"),
+        }
     }
 
     pub async fn handle_rpc(
@@ -182,10 +223,56 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         from: C::NodeId,
         req: Request<C>,
     ) -> anyhow::Result<Response<C>> {
-        Ok(match req {
+        // TODO: avoid clone
+        let res: Response<C> = match req.clone() {
             Request::P2p(p2p_req) => self.handle_p2p_request(from, p2p_req).await?.into(),
             Request::Raft(raft_req) => self.handle_raft_request(from, raft_req).await?.into(),
-        })
+        };
+
+        Ok(res)
+    }
+
+    pub(crate) async fn generate_raft_events(&self, req: &RaftRequest<C>) -> Vec<RaftEvent<C>> {
+        match req {
+            RaftRequest::Append(req) => {
+                req.entries
+                    .iter()
+                    .filter_map(|e| match &e.payload {
+                        EntryPayload::Normal(data) => Some(RaftEvent::EntryCommitted {
+                            log_id: e.log_id.clone(),
+                            data: data.clone(),
+                        }),
+                        EntryPayload::Membership(m) => {
+                            // only send membership signals if the membership is not in a joint config
+                            let enabled = self.config.p2p_config.unstable_membership_signals;
+                            let stable_config = m.get_joint_config().len() <= 1;
+                            (enabled && stable_config).then(|| RaftEvent::MembershipChanged {
+                                log_id: e.log_id.clone(),
+                                members: m.voter_ids().collect::<BTreeSet<_>>(),
+                            })
+                        }
+                        _ => None,
+                    })
+                    .collect_vec()
+            }
+            _ => vec![],
+        }
+    }
+
+    pub(crate) async fn generate_p2p_events(
+        &self,
+        req: &P2pRequest<C>,
+        res: &P2pResponse<C>,
+    ) -> Vec<RaftEvent<C>> {
+        match (req, res) {
+            (P2pRequest::Propose(data), P2pResponse::Committed { log_id }) => {
+                vec![RaftEvent::EntryCommitted {
+                    log_id: log_id.clone(),
+                    data: data.clone(),
+                }]
+            }
+            _ => vec![],
+        }
     }
 
     pub(crate) async fn handle_raft_request(
@@ -193,41 +280,20 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         _from: C::NodeId,
         raft_req: RaftRequest<C>,
     ) -> anyhow::Result<RaftResponse<C>> {
-        let res: RaftResponse<C> = match raft_req {
-            RaftRequest::Append(req) => {
-                // Send signals
-                if let Some(tx) = self.signal_tx.as_ref() {
-                    for e in req.entries.iter() {
-                        let signal = match &e.payload {
-                            EntryPayload::Normal(data) => Some(RaftEvent::EntryCommitted {
-                                log_id: e.log_id.clone(),
-                                data: data.clone(),
-                            }),
-                            EntryPayload::Membership(m) => {
-                                // only send membership signals if the membership is not in a joint config
-                                let enabled = self.config.p2p_config.unstable_membership_signals;
-                                let stable_config = m.get_joint_config().len() <= 1;
-                                (enabled && stable_config).then(|| RaftEvent::MembershipChanged {
-                                    log_id: e.log_id.clone(),
-                                    members: m.voter_ids().collect::<BTreeSet<_>>(),
-                                })
-                            }
-                            _ => None,
-                        };
-                        if let Some(signal) = signal {
-                            if let Err(e) = tx.send((self.id.clone(), signal)).await {
-                                tracing::warn!("failed to send RaftEvent signal: {e:?}");
-                            }
-                        }
-                    }
-                }
-
-                match self.append_entries(req).await {
-                    Ok(r) => Ok(r.into()),
-                    Err(RaftError::APIError(e)) => Ok(e.into()),
-                    Err(RaftError::Fatal(e)) => Err(e),
+        if let Some(tx) = self.signal_tx.as_ref() {
+            for event in self.generate_raft_events(&raft_req).await {
+                if let Err(e) = tx.send((self.id.clone(), event)).await {
+                    tracing::warn!("failed to send RaftEvent signal: {e:?}");
                 }
             }
+        }
+
+        let res: RaftResponse<C> = match raft_req {
+            RaftRequest::Append(req) => match self.append_entries(req).await {
+                Ok(r) => Ok(r.into()),
+                Err(RaftError::APIError(e)) => Ok(e.into()),
+                Err(RaftError::Fatal(e)) => Err(e),
+            },
             RaftRequest::Snapshot {
                 vote,
                 snapshot_meta,
@@ -259,32 +325,56 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
     ) -> anyhow::Result<P2pResponse<C>> {
         let from_current_voter = self.is_voter(&from).await?;
 
-        let res = match req {
+        // TODO: avoid clone?
+        let res = match req.clone() {
             P2pRequest::Propose(data) => {
                 if !from_current_voter {
                     return Ok(P2pResponse::P2pError(P2pError::NotVoter));
                 }
-                self.raft.client_write(data).await
+                match self.write_data(data).await {
+                    Ok(log_id) => P2pResponse::Committed { log_id },
+                    Err(e) => P2pResponse::RaftError(e),
+                }
             }
             P2pRequest::Join => {
-                self.change_membership(
-                    ChangeMembers::AddVoters(
-                        btreemap![from.clone() => (self.nodemap)(from.clone())],
-                    ),
-                    true,
-                )
-                .await
+                match self
+                    .change_membership(
+                        ChangeMembers::AddVoters(
+                            btreemap![from.clone() => (self.nodemap)(from.clone())],
+                        ),
+                        true,
+                    )
+                    .await
+                {
+                    Ok(r) => P2pResponse::Ok,
+                    Err(e) => P2pResponse::RaftError(e),
+                }
             }
             P2pRequest::Leave => {
-                self.change_membership(ChangeMembers::RemoveVoters([from.clone()].into()), true)
+                match self
+                    .change_membership(ChangeMembers::RemoveVoters([from.clone()].into()), true)
                     .await
+                {
+                    Ok(r) => P2pResponse::Ok,
+                    Err(e) => P2pResponse::RaftError(e),
+                }
             }
         };
 
-        Ok(match res {
-            Ok(_) => P2pResponse::Ok,
-            Err(e) => P2pResponse::RaftError(e),
-        })
+        if res.is_ok() {
+            if let Some(tx) = self.signal_tx.as_ref() {
+                let events = self.generate_p2p_events(&req, &res).await;
+                for event in events {
+                    if let Err(e) = tx.send((self.id.clone(), event)).await {
+                        tracing::warn!("failed to send RaftEvent signal: {e:?}");
+                    }
+                }
+            }
+        } else {
+            tracing::debug!("no signals sent because response is error");
+        }
+
+        Ok(res)
     }
 
     pub async fn chore_loop(self) {
