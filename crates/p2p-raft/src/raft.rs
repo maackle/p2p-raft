@@ -311,49 +311,6 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         Ok(res)
     }
 
-    pub(crate) async fn generate_raft_events(&self, req: &RaftRequest<C>) -> Vec<RaftEvent<C>> {
-        match req {
-            RaftRequest::Append(req) => {
-                req.entries
-                    .iter()
-                    .filter_map(|e| match &e.payload {
-                        EntryPayload::Normal(data) => Some(RaftEvent::EntryCommitted {
-                            log_id: e.log_id.clone(),
-                            data: data.clone(),
-                        }),
-                        EntryPayload::Membership(m) => {
-                            // only send membership signals if the membership is not in a joint config
-                            let enabled = self.config.p2p_config.unstable_membership_signals;
-                            let stable_config = m.get_joint_config().len() <= 1;
-                            (enabled && stable_config).then(|| RaftEvent::MembershipChanged {
-                                log_id: e.log_id.clone(),
-                                members: m.voter_ids().collect::<BTreeSet<_>>(),
-                            })
-                        }
-                        _ => None,
-                    })
-                    .collect_vec()
-            }
-            _ => vec![],
-        }
-    }
-
-    pub(crate) async fn generate_p2p_events(
-        &self,
-        req: &P2pRequest<C>,
-        res: &P2pResponse<C>,
-    ) -> Vec<RaftEvent<C>> {
-        match (req, res) {
-            (P2pRequest::Propose(data), P2pResponse::Committed { log_id }) => {
-                vec![RaftEvent::EntryCommitted {
-                    log_id: log_id.clone(),
-                    data: data.clone(),
-                }]
-            }
-            _ => vec![],
-        }
-    }
-
     pub(crate) async fn handle_raft_request(
         &self,
         _from: C::NodeId,
@@ -425,7 +382,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
                     )
                     .await
                 {
-                    Ok(r) => P2pResponse::Ok,
+                    Ok(_) => P2pResponse::Ok,
                     Err(e) => P2pResponse::RaftError(e),
                 }
             }
@@ -434,26 +391,17 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
                     .change_membership(ChangeMembers::RemoveVoters([from.clone()].into()), true)
                     .await
                 {
-                    Ok(r) => P2pResponse::Ok,
+                    Ok(_) => P2pResponse::Ok,
                     Err(e) => P2pResponse::RaftError(e),
                 }
             }
         };
 
-        // if res.is_ok() {
-        //     if let Some(tx) = self.signal_tx.as_ref() {
-        //         let events = self.generate_p2p_events(&req, &res).await;
-        //         for event in events {
-        //             if let Err(e) = tx.send((self.id.clone(), event)).await {
-        //                 tracing::warn!("failed to send RaftEvent signal: {e:?}");
-        //             }
-        //         }
-        //     }
-        // } else {
-        //     tracing::debug!("no signals sent because response is error");
-        // }
-
         Ok(res)
+    }
+
+    pub fn shutdown(self) {
+        self.cancel.cancel();
     }
 
     pub async fn chore_loop(self) {
@@ -598,11 +546,5 @@ where
         ];
 
         lines.into_iter().join(" ")
-    }
-}
-
-impl<C: TypeCfg, N: P2pNetwork<C>> Drop for P2pRaft<C, N> {
-    fn drop(&mut self) {
-        self.cancel.cancel();
     }
 }

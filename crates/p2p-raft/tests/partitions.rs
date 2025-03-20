@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use itertools::Itertools;
 use p2p_raft::{testing::*, Config};
 
 #[tokio::test(flavor = "multi_thread")]

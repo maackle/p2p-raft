@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    time::Duration,
-};
+use std::{collections::BTreeMap, time::Duration};
 
 use itertools::Itertools;
 use p2p_raft::{testing::*, Config};
@@ -43,16 +40,13 @@ async fn receive_signals() {
 
     while let Ok((raft_id, event)) = signal_rx.try_recv() {
         println!("event: {raft_id} {:?}", event);
-        let e = signals.entry(event).or_insert_with(BTreeSet::new);
-        e.insert(raft_id);
+        let e = signals.entry(event).or_insert_with(BTreeMap::new);
+        let count = e.entry(raft_id).or_insert(0);
+        *count += 1;
     }
 
-    // check that a signal for each entry is received by each node
-    // at least once
-    assert_eq!(
-        signals.values().cloned().collect_vec(),
-        vec![(0..NUM_PEERS).collect::<BTreeSet<_>>(); NUM_ENTRIES as usize]
-    );
-
-    // TODO: check for duplicates
+    // check that a signal for each entry is received by each node exactly once
+    let expected_values =
+        vec![(0..NUM_PEERS).map(|p| (p, 1)).collect::<BTreeMap<_, _>>(); NUM_ENTRIES as usize];
+    assert_eq!(signals.values().cloned().collect_vec(), expected_values);
 }
