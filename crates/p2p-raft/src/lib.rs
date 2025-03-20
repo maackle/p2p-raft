@@ -13,7 +13,7 @@ use openraft::RaftTypeConfig;
 
 pub use config::Config;
 pub use peer_tracker::{PeerTracker, PeerTrackerHandle};
-pub use raft::P2pRaft;
+pub use raft::{LogOp, P2pRaft};
 
 #[cfg(feature = "memstore")]
 pub mod mem;

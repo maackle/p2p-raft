@@ -373,7 +373,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         Ok(res)
     }
 
-    pub async fn shutdown(self) -> anyhow::Result<()> {
+    pub async fn shutdown(&self) -> anyhow::Result<()> {
         self.cancel.cancel();
         self.raft
             .shutdown()
