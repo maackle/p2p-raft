@@ -6,8 +6,8 @@ use p2p_raft::{testing::*, Config};
 async fn natural_startup() {
     let num_peers = 5;
     let mut config = Config::default();
-    config.p2p_config.join_interval = Duration::from_millis(100);
-    config.p2p_config.responsive_interval = Duration::from_millis(500);
+    config.join_interval = Duration::from_millis(100);
+    config.responsive_interval = Duration::from_millis(500);
 
     let mut router = Router::new(config, None);
     let rafts = router.add_nodes(0..num_peers).await;

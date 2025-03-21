@@ -1,6 +1,5 @@
-use openraft::RaftNetworkFactory;
-
 use crate::{message::*, TypeCfg};
+use openraft::RaftNetworkFactory;
 
 #[openraft::add_async_trait]
 pub trait P2pNetwork<C: TypeCfg>: RaftNetworkFactory<C> + Clone + Send + Sync + 'static {

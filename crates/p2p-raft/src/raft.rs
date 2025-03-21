@@ -33,6 +33,7 @@ pub struct P2pRaft<C: TypeCfg, N: P2pNetwork<C>> {
     pub tracker: PeerTrackerHandle<C>,
     pub(crate) nodemap: Arc<dyn Fn(C::NodeId) -> C::Node + Send + Sync + 'static>,
 
+    signal_tx: Option<SignalSender<C>>,
     cancel: CancellationToken,
 }
 
@@ -69,21 +70,26 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             network,
             tracker: PeerTrackerHandle::new(),
             nodemap: Arc::new(nodemap),
+            signal_tx,
             cancel,
         };
 
-        {
-            let token = raft.cancel.clone();
-            let chores = raft.clone().chore_loop();
-            tokio::spawn(async move { token.run_until_cancelled(chores).await });
-        }
-        if let Some(tx) = signal_tx {
-            let token = raft.cancel.clone();
-            let chores = raft.clone().signal_loop(tx);
-            tokio::spawn(async move { token.run_until_cancelled(chores).await });
-        }
+        raft.start();
 
         Ok(raft)
+    }
+
+    pub fn start(&self) {
+        {
+            let token = self.cancel.clone();
+            let chores = self.clone().chore_loop();
+            tokio::spawn(async move { token.run_until_cancelled(chores).await });
+        }
+        if let Some(tx) = self.signal_tx.clone() {
+            let token = self.cancel.clone();
+            let chores = self.clone().signal_loop(tx);
+            tokio::spawn(async move { token.run_until_cancelled(chores).await });
+        }
     }
 
     pub async fn is_leader(&self) -> bool {
@@ -244,7 +250,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
                     .unwrap_p_2_p());
             } else {
                 let res = match tokio::time::timeout(
-                    self.config.p2p_config.request_timeout,
+                    self.config.request_timeout,
                     self.network.send_rpc(leader, req.clone()),
                 )
                 .await
@@ -386,7 +392,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         let source = self.id.clone();
         let raft = self.clone();
 
-        let mut interval = tokio::time::interval(self.config.p2p_config.join_interval);
+        let mut interval = tokio::time::interval(self.config.join_interval);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
         loop {
@@ -462,7 +468,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             }),
             EntryPayload::Membership(m) => {
                 // only send membership signals if the membership is not in a joint config
-                let enabled = self.config.p2p_config.unstable_membership_signals;
+                let enabled = self.config.unstable_membership_signals;
                 let stable_config = m.get_joint_config().len() <= 1;
                 (enabled && stable_config).then(|| RaftEvent::MembershipChanged {
                     log_id: e.log_id.clone(),
@@ -493,7 +499,7 @@ where
     pub async fn debug_line(&self) -> String {
         use itertools::Itertools;
         let t = self.tracker.lock().await;
-        let peers = t.responsive_peers(self.config.p2p_config.responsive_interval);
+        let peers = t.responsive_peers(self.config.responsive_interval);
         let members = self
             .raft
             .with_raft_state(|s| {

@@ -230,7 +230,7 @@ impl RouterNode {
         {
             let mut t = r.tracker.lock().await;
             t.touch(&to);
-            t.handle_absentees(&r, self.router.config.p2p_config.responsive_interval)
+            t.handle_absentees(&r, self.router.config.responsive_interval)
                 .await;
         }
 
