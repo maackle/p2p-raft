@@ -9,7 +9,7 @@ use super::*;
 
 impl<C, N: P2pNetwork<C>> P2pRaft<C, N>
 where
-    C: TypeCfg<SnapshotData = p2p_raft_memstore::StateMachineData<C>>,
+    C: TypeCfg,
     ArcStateMachineStore<C>: RaftStateMachine<C>,
 {
     /// Create a new raft instance with in-memory storage and a trivial state machine.

@@ -6,14 +6,17 @@ use openraft::ServerState;
 use crate::network::P2pNetwork;
 
 #[allow(warnings)]
-pub fn spawn_info_loop<C, N>(mut rafts: Vec<crate::P2pRaft<C, N>>, poll_interval_ms: u64)
-where
+pub fn spawn_info_loop<C, N>(
+    rafts: impl IntoIterator<Item = crate::P2pRaft<C, N>>,
+    poll_interval_ms: u64,
+) where
     C: crate::TypeCfg<
         Entry = openraft::Entry<C>,
         SnapshotData = p2p_raft_memstore::StateMachineData<C>,
     >,
     N: P2pNetwork<C>,
 {
+    let rafts = rafts.into_iter().collect_vec();
     tokio::spawn({
         let mut interval = tokio::time::interval(Duration::from_millis(poll_interval_ms));
         async move {
@@ -21,7 +24,7 @@ where
                 interval.tick().await;
                 println!();
                 println!("........................................................");
-                for r in rafts.iter_mut() {
+                for r in rafts.iter() {
                     println!("{}", r.debug_line().await);
                 }
                 println!("........................................................");
@@ -32,7 +35,7 @@ where
 }
 
 pub async fn await_any_leader_t<C, N>(
-    rafts: &[crate::P2pRaft<C, N>],
+    rafts: impl IntoIterator<Item = &crate::P2pRaft<C, N>>,
     timeout: Option<Duration>,
 ) -> anyhow::Result<C::NodeId>
 where
@@ -42,6 +45,7 @@ where
     >,
     N: P2pNetwork<C>,
 {
+    let rafts = rafts.into_iter().collect_vec();
     let start = std::time::Instant::now();
     let ids = rafts.iter().map(|r| r.id.clone()).collect_vec();
     println!("awaiting any leader for {ids:?}");
@@ -60,7 +64,9 @@ where
     Ok(leader)
 }
 
-pub async fn await_any_leader<C, N>(rafts: &[crate::P2pRaft<C, N>]) -> C::NodeId
+pub async fn await_any_leader<C, N>(
+    rafts: impl IntoIterator<Item = &crate::P2pRaft<C, N>>,
+) -> C::NodeId
 where
     C: crate::TypeCfg<
         Entry = openraft::Entry<C>,
@@ -68,6 +74,7 @@ where
     >,
     N: P2pNetwork<C>,
 {
+    let rafts = rafts.into_iter().collect_vec();
     let start = std::time::Instant::now();
     let ids = rafts.iter().map(|r| r.id.clone()).collect_vec();
     println!("awaiting any leader for {ids:?}");
@@ -105,7 +112,7 @@ where
     leader
 }
 
-pub async fn await_partition_stability<C, N>(rafts: &[crate::P2pRaft<C, N>])
+pub async fn await_partition_stability<C, N>(rafts: impl IntoIterator<Item = &crate::P2pRaft<C, N>>)
 where
     C: crate::TypeCfg<
         Entry = openraft::Entry<C>,
@@ -113,13 +120,13 @@ where
     >,
     N: P2pNetwork<C>,
 {
+    let rafts = rafts.into_iter().collect_vec();
     let start = std::time::Instant::now();
     let ids = rafts.iter().map(|r| r.id.clone()).collect_vec();
 
     println!("~~ awaiting stability for partition {ids:?}",);
 
     futures::future::join_all(rafts.iter().map(|r| {
-        let r = r.clone();
         let ids = ids.clone();
         async move { r.wait(None).voter_ids(ids, "partition stability").await }
     }))

@@ -22,13 +22,16 @@ pub use p2p_raft_memstore::{ArcStateMachineStore, LogStore, StateMachineData, St
 
 /// Extra trait bounds on RaftTypeConfig which are generally required by this crate.
 pub trait TypeCfg:
+    serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + Clone + Eq + Ord + Send +
+    
     RaftTypeConfig<
     D: std::fmt::Debug + Clone + Eq + Ord + serde::Serialize + serde::de::DeserializeOwned,
     R = (),
     // R: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
     Vote: Clone + serde::Serialize + serde::de::DeserializeOwned,
     LeaderId: Clone + serde::Serialize + serde::de::DeserializeOwned,
-    SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
+    // SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
+    SnapshotData = p2p_raft_memstore::StateMachineData<Self>,
     Entry = openraft::Entry<Self>,
     // Node = (),
     Responder = openraft::impls::OneshotResponder<Self>,
