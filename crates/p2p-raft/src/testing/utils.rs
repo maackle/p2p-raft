@@ -35,7 +35,7 @@ pub fn spawn_info_loop<C, N>(
 }
 
 pub async fn await_any_leader_t<C, N>(
-    rafts: impl IntoIterator<Item = &crate::P2pRaft<C, N>>,
+    rafts: impl IntoIterator<Item = impl std::ops::Deref<Target = crate::P2pRaft<C, N>>>,
     timeout: Option<Duration>,
 ) -> anyhow::Result<C::NodeId>
 where
@@ -45,7 +45,7 @@ where
     >,
     N: P2pNetwork<C>,
 {
-    let rafts = rafts.into_iter().collect_vec();
+    let rafts = rafts.into_iter().map(|r| r.deref().clone()).collect_vec();
     let start = std::time::Instant::now();
     let ids = rafts.iter().map(|r| r.id.clone()).collect_vec();
     println!("awaiting any leader for {ids:?}");
@@ -65,7 +65,7 @@ where
 }
 
 pub async fn await_any_leader<C, N>(
-    rafts: impl IntoIterator<Item = &crate::P2pRaft<C, N>>,
+    rafts: impl IntoIterator<Item = impl std::ops::Deref<Target = crate::P2pRaft<C, N>>>,
 ) -> C::NodeId
 where
     C: crate::TypeCfg<
@@ -74,7 +74,7 @@ where
     >,
     N: P2pNetwork<C>,
 {
-    let rafts = rafts.into_iter().collect_vec();
+    let rafts = rafts.into_iter().map(|r| r.deref().clone()).collect_vec();
     let start = std::time::Instant::now();
     let ids = rafts.iter().map(|r| r.id.clone()).collect_vec();
     println!("awaiting any leader for {ids:?}");
@@ -112,15 +112,16 @@ where
     leader
 }
 
-pub async fn await_partition_stability<C, N>(rafts: impl IntoIterator<Item = &crate::P2pRaft<C, N>>)
-where
+pub async fn await_partition_stability<C, N>(
+    rafts: impl IntoIterator<Item = impl std::ops::Deref<Target = crate::P2pRaft<C, N>>>,
+) where
     C: crate::TypeCfg<
         Entry = openraft::Entry<C>,
         SnapshotData = p2p_raft_memstore::StateMachineData<C>,
     >,
     N: P2pNetwork<C>,
 {
-    let rafts = rafts.into_iter().collect_vec();
+    let rafts = rafts.into_iter().map(|r| r.deref().clone()).collect_vec();
     let start = std::time::Instant::now();
     let ids = rafts.iter().map(|r| r.id.clone()).collect_vec();
 
