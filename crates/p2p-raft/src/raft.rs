@@ -48,7 +48,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         nodemap: impl Fn(C::NodeId) -> C::Node + Send + Sync + 'static,
     ) -> anyhow::Result<Self>
     where
-        C: TypeCfg<R = (), Entry = Entry<C>, SnapshotData = p2p_raft_memstore::StateMachineData<C>>,
+        C: TypeCfg<R = (), Entry = Entry<C>>,
     {
         let cancel = CancellationToken::new();
         let config = config.into();
@@ -493,7 +493,7 @@ pub struct LogOp<C: TypeCfg> {
 #[cfg(feature = "testing")]
 impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N>
 where
-    C: TypeCfg<Entry = Entry<C>, SnapshotData = p2p_raft_memstore::StateMachineData<C>>,
+    C: TypeCfg<Entry = Entry<C>>,
 {
     #[allow(unused_variables)]
     pub async fn debug_line(&self) -> String {
@@ -512,12 +512,7 @@ where
             .unwrap();
 
         let log = self.read_log_ops(0).await;
-        let snapshot = self
-            .raft
-            .get_snapshot()
-            .await
-            .unwrap()
-            .map(|s| s.snapshot.data);
+        let snapshot = self.raft.get_snapshot().await.unwrap().map(|s| s.snapshot);
 
         let lines = [
             format!("... "),

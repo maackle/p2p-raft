@@ -12,6 +12,7 @@ pub mod testing;
 use openraft::RaftTypeConfig;
 
 pub use config::Config;
+use p2p_raft_memstore::MemTypeConfig;
 pub use peer_tracker::{PeerTracker, PeerTrackerHandle};
 pub use raft::{LogOp, P2pRaft};
 
@@ -23,7 +24,7 @@ pub use p2p_raft_memstore::{ArcStateMachineStore, LogStore, StateMachineData, St
 /// Extra trait bounds on RaftTypeConfig which are generally required by this crate.
 pub trait TypeCfg:
     serde::Serialize + serde::de::DeserializeOwned + std::fmt::Debug + Clone + Eq + Ord + Send +
-    
+    MemTypeConfig +
     RaftTypeConfig<
     D: std::fmt::Debug + Clone + Eq + Ord + serde::Serialize + serde::de::DeserializeOwned,
     R = (),

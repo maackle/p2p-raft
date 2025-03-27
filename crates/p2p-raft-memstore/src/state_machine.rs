@@ -6,10 +6,11 @@ use openraft::alias::SnapshotDataOf;
 use openraft::storage::RaftStateMachine;
 use openraft::*;
 
+use crate::MemTypeConfig;
 use crate::StateMachineData;
 
 #[derive(Debug)]
-pub struct StoredSnapshot<C: RaftTypeConfig> {
+pub struct StoredSnapshot<C: MemTypeConfig> {
     pub meta: SnapshotMeta<C>,
 
     /// The data of the state machine at the time of this snapshot.
@@ -18,18 +19,11 @@ pub struct StoredSnapshot<C: RaftTypeConfig> {
 
 /// Awkward. Need this newtype to implement traits generically.
 #[derive(Clone, derive_more::Deref, derive_more::From)]
-pub struct ArcStateMachineStore<C: RaftTypeConfig>(Arc<StateMachineStore<C>>)
-where
-    C: RaftTypeConfig<SnapshotData = SnapshotData<C>>,
-    C::D: Clone + Debug;
+pub struct ArcStateMachineStore<C: MemTypeConfig>(Arc<StateMachineStore<C>>);
 
 /// Defines a state machine for the Raft cluster. This state machine represents a copy of the
 /// data for this node. Additionally, it is responsible for storing the last snapshot of the data.
-pub struct StateMachineStore<C: RaftTypeConfig>
-where
-    C: RaftTypeConfig<SnapshotData = SnapshotData<C>>,
-    C::D: Clone + Debug,
-{
+pub struct StateMachineStore<C: MemTypeConfig> {
     /// The Raft state machine.
     pub state_machine: Mutex<StateMachineData<C>>,
 
@@ -39,11 +33,7 @@ where
     current_snapshot: Mutex<Option<StoredSnapshot<C>>>,
 }
 
-impl<C: RaftTypeConfig> Default for StateMachineStore<C>
-where
-    C: RaftTypeConfig<SnapshotData = SnapshotData<C>>,
-    C::D: Clone + Debug,
-{
+impl<C: MemTypeConfig> Default for StateMachineStore<C> {
     fn default() -> Self {
         Self {
             state_machine: Mutex::new(StateMachineData::default()),
@@ -53,15 +43,7 @@ where
     }
 }
 
-pub type SnapshotData<C> = Vec<<C as RaftTypeConfig>::D>;
-
-impl<C: RaftTypeConfig> RaftSnapshotBuilder<C> for ArcStateMachineStore<C>
-where
-    C: RaftTypeConfig<SnapshotData = SnapshotData<C>>,
-    C: RaftTypeConfig<Entry = openraft::Entry<C>>,
-    C::D: Clone + Debug,
-    StateMachineData<C>: Clone,
-{
+impl<C: MemTypeConfig> RaftSnapshotBuilder<C> for ArcStateMachineStore<C> {
     #[tracing::instrument(level = "trace", skip(self))]
     async fn build_snapshot(&mut self) -> Result<Snapshot<C>, StorageError<C>> {
         let data;
@@ -117,13 +99,7 @@ where
     }
 }
 
-impl<C: RaftTypeConfig> RaftStateMachine<C> for ArcStateMachineStore<C>
-where
-    C: RaftTypeConfig<SnapshotData = SnapshotData<C>>,
-    C: RaftTypeConfig<Entry = openraft::Entry<C>, R = ()>,
-    C::D: Clone + Debug,
-    StateMachineData<C>: Clone,
-{
+impl<C: MemTypeConfig> RaftStateMachine<C> for ArcStateMachineStore<C> {
     type SnapshotBuilder = Self;
 
     async fn applied_state(

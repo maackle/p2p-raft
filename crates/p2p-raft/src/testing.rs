@@ -17,7 +17,7 @@ openraft::declare_raft_types!(
         Node = (),
         // In this example, snapshot is just a copy of the state machine.
         // And it can be any type.
-        SnapshotData = p2p_raft_memstore::StateMachineData<TypeConfig>,
+        SnapshotData = Vec<u64>,
 );
 
 impl crate::TypeCfg for TypeConfig {}

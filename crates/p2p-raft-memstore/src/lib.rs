@@ -11,15 +11,34 @@ pub use state_machine::{ArcStateMachineStore, StateMachineStore};
 
 pub type SnapshotData<C> = Vec<<C as RaftTypeConfig>::D>;
 
+pub trait MemTypeConfig:
+    RaftTypeConfig<
+    D: Clone + std::fmt::Debug,
+    SnapshotData = SnapshotData<Self>,
+    Entry = openraft::Entry<Self>,
+    R = (),
+>
+{
+}
+impl<C> MemTypeConfig for C where
+    C: RaftTypeConfig<
+        D: Clone + std::fmt::Debug,
+        SnapshotData = SnapshotData<C>,
+        Entry = openraft::Entry<C>,
+        R = (),
+    >
+{
+}
+
 /// Data contained in the Raft state machine.
 ///
 /// Note that we are using `serde` to serialize the
 /// `data`, which has a implementation to be serialized. Note that for this test we set both the key
 /// and value as String, but you could set any type of value that has the serialization impl.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-pub struct StateMachineData<C: RaftTypeConfig>
+pub struct StateMachineData<C: MemTypeConfig>
 where
-    C: RaftTypeConfig<SnapshotData = SnapshotData<C>>,
+    C: RaftTypeConfig,
     C::D: Clone + std::fmt::Debug,
 {
     pub last_applied: Option<openraft::LogId<C>>,
@@ -27,13 +46,14 @@ where
     pub last_membership: openraft::StoredMembership<C>,
 
     /// Application data, just a list of requests.
-    pub data: SnapshotData<C>,
+    pub data: C::SnapshotData,
 }
 
-impl<C: RaftTypeConfig> Default for StateMachineData<C>
+impl<C: MemTypeConfig> Default for StateMachineData<C>
 where
-    C: RaftTypeConfig<SnapshotData = SnapshotData<C>>,
+    C: RaftTypeConfig,
     C::D: Clone + std::fmt::Debug,
+    C::SnapshotData: Clone + Default,
 {
     fn default() -> Self {
         Self {

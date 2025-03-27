@@ -11,18 +11,19 @@ use openraft::alias::VoteOf;
 use openraft::entry::RaftEntry;
 use openraft::storage::IOFlushed;
 use openraft::LogState;
-use openraft::RaftTypeConfig;
 use openraft::StorageError;
 use tokio::sync::Mutex;
 
+use crate::MemTypeConfig;
+
 /// RaftLogStore implementation with a in-memory storage
 #[derive(Clone, Debug, Default)]
-pub struct LogStore<C: RaftTypeConfig> {
+pub struct LogStore<C: MemTypeConfig> {
     inner: Arc<Mutex<LogStoreInner<C>>>,
 }
 
 #[derive(Debug)]
-pub struct LogStoreInner<C: RaftTypeConfig> {
+pub struct LogStoreInner<C: MemTypeConfig> {
     /// The last purged log id.
     last_purged_log_id: Option<LogIdOf<C>>,
 
@@ -36,7 +37,7 @@ pub struct LogStoreInner<C: RaftTypeConfig> {
     vote: Option<VoteOf<C>>,
 }
 
-impl<C: RaftTypeConfig> Default for LogStoreInner<C> {
+impl<C: MemTypeConfig> Default for LogStoreInner<C> {
     fn default() -> Self {
         Self {
             last_purged_log_id: None,
@@ -47,7 +48,7 @@ impl<C: RaftTypeConfig> Default for LogStoreInner<C> {
     }
 }
 
-impl<C: RaftTypeConfig> LogStoreInner<C> {
+impl<C: MemTypeConfig> LogStoreInner<C> {
     async fn try_get_log_entries<RB: RangeBounds<u64> + Clone + Debug>(
         &mut self,
         range: RB,
@@ -158,12 +159,12 @@ mod impl_log_store {
     use openraft::storage::RaftLogStorage;
     use openraft::LogState;
     use openraft::RaftLogReader;
-    use openraft::RaftTypeConfig;
     use openraft::StorageError;
 
     use crate::log_store::LogStore;
+    use crate::MemTypeConfig;
 
-    impl<C: RaftTypeConfig> RaftLogReader<C> for LogStore<C>
+    impl<C: MemTypeConfig> RaftLogReader<C> for LogStore<C>
     where
         C::Entry: Clone,
     {
@@ -181,7 +182,7 @@ mod impl_log_store {
         }
     }
 
-    impl<C: RaftTypeConfig> RaftLogStorage<C> for LogStore<C>
+    impl<C: MemTypeConfig> RaftLogStorage<C> for LogStore<C>
     where
         C::Entry: Clone,
     {
