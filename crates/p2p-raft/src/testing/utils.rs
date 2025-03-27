@@ -10,10 +10,7 @@ pub fn spawn_info_loop<C, N>(
     rafts: impl IntoIterator<Item = crate::P2pRaft<C, N>>,
     poll_interval_ms: u64,
 ) where
-    C: crate::TypeCfg<
-        Entry = openraft::Entry<C>,
-        SnapshotData = p2p_raft_memstore::StateMachineData<C>,
-    >,
+    C: crate::TypeCfg<Entry = openraft::Entry<C>, SnapshotData = SnapshotData<C>>,
     N: P2pNetwork<C>,
 {
     let rafts = rafts.into_iter().collect_vec();
@@ -39,10 +36,7 @@ pub async fn await_any_leader_t<C, N>(
     timeout: Option<Duration>,
 ) -> anyhow::Result<C::NodeId>
 where
-    C: crate::TypeCfg<
-        Entry = openraft::Entry<C>,
-        SnapshotData = p2p_raft_memstore::StateMachineData<C>,
-    >,
+    C: crate::TypeCfg<Entry = openraft::Entry<C>, SnapshotData = SnapshotData<C>>,
     N: P2pNetwork<C>,
 {
     let rafts = rafts.into_iter().map(|r| r.deref().clone()).collect_vec();
@@ -68,10 +62,7 @@ pub async fn await_any_leader<C, N>(
     rafts: impl IntoIterator<Item = impl std::ops::Deref<Target = crate::P2pRaft<C, N>>>,
 ) -> C::NodeId
 where
-    C: crate::TypeCfg<
-        Entry = openraft::Entry<C>,
-        SnapshotData = p2p_raft_memstore::StateMachineData<C>,
-    >,
+    C: crate::TypeCfg<Entry = openraft::Entry<C>, SnapshotData = SnapshotData<C>>,
     N: P2pNetwork<C>,
 {
     let rafts = rafts.into_iter().map(|r| r.deref().clone()).collect_vec();
@@ -115,10 +106,7 @@ where
 pub async fn await_partition_stability<C, N>(
     rafts: impl IntoIterator<Item = impl std::ops::Deref<Target = crate::P2pRaft<C, N>>>,
 ) where
-    C: crate::TypeCfg<
-        Entry = openraft::Entry<C>,
-        SnapshotData = p2p_raft_memstore::StateMachineData<C>,
-    >,
+    C: crate::TypeCfg<Entry = openraft::Entry<C>, SnapshotData = SnapshotData<C>>,
     N: P2pNetwork<C>,
 {
     let rafts = rafts.into_iter().map(|r| r.deref().clone()).collect_vec();

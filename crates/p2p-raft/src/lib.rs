@@ -30,8 +30,8 @@ pub trait TypeCfg:
     // R: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
     Vote: Clone + serde::Serialize + serde::de::DeserializeOwned,
     LeaderId: Clone + serde::Serialize + serde::de::DeserializeOwned,
-    // SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
-    SnapshotData = p2p_raft_memstore::StateMachineData<Self>,
+    SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
+    
     Entry = openraft::Entry<Self>,
     // Node = (),
     Responder = openraft::impls::OneshotResponder<Self>,

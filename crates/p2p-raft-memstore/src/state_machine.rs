@@ -18,11 +18,18 @@ pub struct StoredSnapshot<C: RaftTypeConfig> {
 
 /// Awkward. Need this newtype to implement traits generically.
 #[derive(Clone, derive_more::Deref, derive_more::From)]
-pub struct ArcStateMachineStore<C: RaftTypeConfig>(Arc<StateMachineStore<C>>);
+pub struct ArcStateMachineStore<C: RaftTypeConfig>(Arc<StateMachineStore<C>>)
+where
+    C: RaftTypeConfig<SnapshotData = SnapshotData<C>>,
+    C::D: Clone + Debug;
 
 /// Defines a state machine for the Raft cluster. This state machine represents a copy of the
 /// data for this node. Additionally, it is responsible for storing the last snapshot of the data.
-pub struct StateMachineStore<C: RaftTypeConfig> {
+pub struct StateMachineStore<C: RaftTypeConfig>
+where
+    C: RaftTypeConfig<SnapshotData = SnapshotData<C>>,
+    C::D: Clone + Debug,
+{
     /// The Raft state machine.
     pub state_machine: Mutex<StateMachineData<C>>,
 
@@ -32,7 +39,11 @@ pub struct StateMachineStore<C: RaftTypeConfig> {
     current_snapshot: Mutex<Option<StoredSnapshot<C>>>,
 }
 
-impl<C: RaftTypeConfig> Default for StateMachineStore<C> {
+impl<C: RaftTypeConfig> Default for StateMachineStore<C>
+where
+    C: RaftTypeConfig<SnapshotData = SnapshotData<C>>,
+    C::D: Clone + Debug,
+{
     fn default() -> Self {
         Self {
             state_machine: Mutex::new(StateMachineData::default()),
@@ -42,10 +53,13 @@ impl<C: RaftTypeConfig> Default for StateMachineStore<C> {
     }
 }
 
+pub type SnapshotData<C> = Vec<<C as RaftTypeConfig>::D>;
+
 impl<C: RaftTypeConfig> RaftSnapshotBuilder<C> for ArcStateMachineStore<C>
 where
-    C: RaftTypeConfig<Entry = openraft::Entry<C>, SnapshotData = StateMachineData<C>>,
-    C::SnapshotData: Clone,
+    C: RaftTypeConfig<SnapshotData = SnapshotData<C>>,
+    C: RaftTypeConfig<Entry = openraft::Entry<C>>,
+    C::D: Clone + Debug,
     StateMachineData<C>: Clone,
 {
     #[tracing::instrument(level = "trace", skip(self))]
@@ -88,7 +102,7 @@ where
 
         let snapshot = StoredSnapshot {
             meta: meta.clone(),
-            data: data.clone(),
+            data: data.data.clone(),
         };
 
         {
@@ -98,15 +112,16 @@ where
 
         Ok(Snapshot {
             meta,
-            snapshot: data,
+            snapshot: data.data,
         })
     }
 }
 
 impl<C: RaftTypeConfig> RaftStateMachine<C> for ArcStateMachineStore<C>
 where
-    C: RaftTypeConfig<Entry = openraft::Entry<C>, SnapshotData = StateMachineData<C>, R = ()>,
-    C::SnapshotData: Clone,
+    C: RaftTypeConfig<SnapshotData = SnapshotData<C>>,
+    C: RaftTypeConfig<Entry = openraft::Entry<C>, R = ()>,
+    C::D: Clone + Debug,
     StateMachineData<C>: Clone,
 {
     type SnapshotBuilder = Self;
@@ -164,7 +179,11 @@ where
 
         // Update the state machine.
         {
-            let updated_state_machine: StateMachineData<C> = new_snapshot.data.clone();
+            let updated_state_machine = StateMachineData {
+                last_applied: meta.last_log_id.clone(),
+                last_membership: meta.last_membership.clone(),
+                data: new_snapshot.data.clone(),
+            };
             let mut state_machine = self.state_machine.lock().unwrap();
             *state_machine = updated_state_machine;
         }
