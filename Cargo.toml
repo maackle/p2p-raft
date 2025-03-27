@@ -31,7 +31,7 @@ openraft-memstore = { git = "https://github.com/databendlabs/openraft" }
 
 p2p-raft-memstore = { path = "crates/p2p-raft-memstore" }
 
-[patch."https://github.com/databendlabs/openraft"]
-openraft = { path = "/home/michael/gitfork/openraft/openraft" }
-openraft-macros = { path = "/home/michael/gitfork/openraft/macros" }
-openraft-memstore = { path = "/home/michael/gitfork/openraft/stores/memstore" }
+# [patch."https://github.com/databendlabs/openraft"]
+# openraft = { path = "/home/michael/gitfork/openraft/openraft" }
+# openraft-macros = { path = "/home/michael/gitfork/openraft/macros" }
+# openraft-memstore = { path = "/home/michael/gitfork/openraft/stores/memstore" }
