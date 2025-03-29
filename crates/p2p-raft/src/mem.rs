@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use openraft::{alias::NodeIdOf, storage::RaftStateMachine};
+use futures::FutureExt;
+use openraft::{alias::NodeIdOf, storage::RaftStateMachine, SnapshotMeta};
 use p2p_raft_memstore::ArcStateMachineStore;
 
 use crate::{config::Config, network::P2pNetwork, signal::SignalSender};
@@ -35,71 +36,71 @@ where
         .await?)
     }
 
-    // /// NOTE: only run this as leader!
-    // /// XXX: really this is just a workaround for when it's not feasible to implement
-    // ///      merging in the state machine, when that logic needs to be in the front end
-    // ///      and the merged snapshot is forced by the leader.
-    // #[deprecated = "this does not work!"]
-    // pub async fn replace_snapshot(&self, data: Vec<p2p_raft_memstore::Request>) {
-    //     use openraft::storage::RaftStateMachine;
+    /// NOTE: only run this as leader!
+    /// XXX: really this is just a workaround for when it's not feasible to implement
+    ///      merging in the state machine, when that logic needs to be in the front end
+    ///      and the merged snapshot is forced by the leader.
+    #[deprecated = "this does not work!"]
+    pub async fn replace_snapshot(&self, data: C::SnapshotData) {
+        use openraft::storage::RaftStateMachine;
 
-    //     let smd = {
-    //         let mut sm = self
-    //             .raft
-    //             .with_state_machine(|s: &mut Arc<StateMachineStore<C>>| {
-    //                 async move { s.state_machine.lock().unwrap().clone() }.boxed()
-    //             })
-    //             .await
-    //             .unwrap()
-    //             .unwrap();
+        let smd = {
+            let mut sm = self
+                .raft
+                .with_state_machine(|s: &mut ArcStateMachineStore<C>| {
+                    async move { s.state_machine.lock().unwrap().clone() }.boxed()
+                })
+                .await
+                .unwrap()
+                .unwrap();
 
-    //         sm.data = data;
-    //         // sm.last_applied.map(|mut l| {
-    //         //     l.index += 1;
-    //         //     l
-    //         // });
-    //         sm
-    //     };
+            sm.data = data;
+            // sm.last_applied.map(|mut l| {
+            //     l.index += 1;
+            //     l
+            // });
+            sm
+        };
 
-    //     let snapshot = Box::new(smd.clone());
+        let snapshot = Box::new(smd.clone());
 
-    //     let snapshot_id = self
-    //         .raft
-    //         .with_raft_state(|s| s.snapshot_meta.snapshot_id.clone())
-    //         .await
-    //         .unwrap();
+        let snapshot_id = self
+            .raft
+            .with_raft_state(|s| s.snapshot_meta.snapshot_id.clone())
+            .await
+            .unwrap();
 
-    //     let meta = SnapshotMeta {
-    //         last_log_id: smd.last_applied,
-    //         last_membership: smd.last_membership,
-    //         snapshot_id,
-    //         // snapshot_id: nanoid::nanoid!(),
-    //     };
+        let meta = SnapshotMeta {
+            last_log_id: smd.last_applied.clone(),
+            last_membership: smd.last_membership.clone(),
+            snapshot_id,
+            // snapshot_id: nanoid::nanoid!(),
+        };
 
-    //     self.with_state_machine(move |s: &mut Arc<StateMachineStore<C>>| {
-    //         async move {
-    //             s.clone()
-    //                 .install_snapshot(&meta.clone(), snapshot)
-    //                 .await
-    //                 .unwrap();
-    //             // s.build_snapshot().await.unwrap();
-    //         }
-    //         .boxed()
-    //     })
-    //     .await
-    //     .unwrap()
-    //     .unwrap();
+        self.with_state_machine(move |s: &mut ArcStateMachineStore<C>| {
+            async move {
+                s.clone()
+                    .install_snapshot(&meta.clone(), snapshot.data)
+                    .await
+                    .unwrap();
+                // s.build_snapshot().await.unwrap();
+            }
+            .boxed()
+        })
+        .await
+        .unwrap()
+        .unwrap();
 
-    //     let trigger = self.raft.trigger();
-    //     trigger
-    //         .purge_log(smd.last_applied.map(|l| l.index).unwrap_or_default())
-    //         .await
-    //         .unwrap();
-    //     trigger.snapshot().await.unwrap();
-    //     trigger.heartbeat().await.unwrap();
+        let trigger = self.raft.trigger();
+        trigger
+            .purge_log(smd.last_applied.map(|l| l.index).unwrap_or_default())
+            .await
+            .unwrap();
+        trigger.snapshot().await.unwrap();
+        trigger.heartbeat().await.unwrap();
 
-    //     // raft.install_full_snapshot(Vote::new(term, raft.id), snapshot)
-    //     //     .await
-    //     //     .unwrap();
-    // }
+        // raft.install_full_snapshot(Vote::new(term, raft.id), snapshot)
+        //     .await
+        //     .unwrap();
+    }
 }

@@ -9,6 +9,7 @@ use crate::network::P2pNetwork;
 pub fn spawn_info_loop<C, N>(
     rafts: impl IntoIterator<Item = crate::P2pRaft<C, N>>,
     poll_interval_ms: u64,
+    verbose: bool,
 ) where
     C: crate::TypeCfg<Entry = openraft::Entry<C>>,
     N: P2pNetwork<C>,
@@ -22,7 +23,7 @@ pub fn spawn_info_loop<C, N>(
                 println!();
                 println!("........................................................");
                 for r in rafts.iter() {
-                    println!("{}", r.debug_line().await);
+                    println!("{}", r.debug_line(verbose).await);
                 }
                 println!("........................................................");
                 println!();

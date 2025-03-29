@@ -8,7 +8,7 @@ async fn test_snapshot() {
     let rafts = router.add_nodes(0..NUM_PEERS).await;
     router.initialize_nodes().await;
 
-    spawn_info_loop(rafts.clone(), 1000);
+    spawn_info_loop(rafts.clone(), 1000, true);
 
     let leader = await_any_leader(&rafts).await as usize;
 
@@ -17,7 +17,7 @@ async fn test_snapshot() {
     rafts[leader].write_linearizable(2).await.unwrap();
     println!("wrote data.");
 
-    // rafts[leader].replace_snapshot(vec![5, 4, 3, 2, 1]).await;
+    rafts[leader].replace_snapshot(vec![5, 4, 3, 2, 1]).await;
     println!("replaced snapshot.");
 
     sleep(3_000).await;

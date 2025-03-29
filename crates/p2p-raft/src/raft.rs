@@ -496,7 +496,7 @@ where
     C: TypeCfg<Entry = Entry<C>>,
 {
     #[allow(unused_variables)]
-    pub async fn debug_line(&self) -> String {
+    pub async fn debug_line(&self, verbose: bool) -> String {
         use itertools::Itertools;
         let t = self.tracker.lock().await;
         let peers = t.responsive_peers(self.config.responsive_interval);
@@ -511,19 +511,33 @@ where
             .await
             .unwrap();
 
-        let log = self.read_log_ops(0).await;
-        let snapshot = self.raft.get_snapshot().await.unwrap().map(|s| s.snapshot);
+        if verbose {
+            let log = self.read_log_ops(0).await;
+            let snapshot = self.raft.get_snapshot().await.unwrap().map(|s| s.snapshot);
 
-        let lines = [
-            format!("... "),
-            format!("{}", self.id),
-            format!("<{:?}>", self.current_leader().await),
-            format!("members {:?}", members),
-            format!("sees {:?}", peers),
-            // format!("snapshot {:?}", snapshot),
-            // format!("log {:?}", log),
-        ];
-
-        lines.into_iter().join(" ")
+            [
+                format!("... "),
+                format!("{}", self.id),
+                format!("<{:?}>", self.current_leader().await),
+                format!("members {:?}", members),
+                format!("sees {:?}", peers),
+                format!("snapshot {:?}", snapshot),
+                format!("log {:?}", log),
+            ]
+            .into_iter()
+            .join(" ")
+        } else {
+            [
+                format!("... "),
+                format!("{}", self.id),
+                format!("<{:?}>", self.current_leader().await),
+                format!("members {:?}", members),
+                format!("sees {:?}", peers),
+                // format!("snapshot {:?}", snapshot),
+                // format!("log {:?}", log),
+            ]
+            .into_iter()
+            .join(" ")
+        }
     }
 }
