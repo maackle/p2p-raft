@@ -10,6 +10,7 @@ use super::TypeConfig;
 use parking_lot::Mutex;
 
 use crate::config::Config;
+use crate::error::PResultExt;
 use crate::message::Request;
 use crate::message::Response;
 use crate::signal::SignalSender;
@@ -58,9 +59,12 @@ impl Router {
         let all_ids = rafts.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
 
         for (n, raft) in rafts.iter().enumerate() {
+            if n == 0 {
+                continue;
+            }
             let ids = all_ids[0..=n].to_vec();
             raft.initialize(ids.clone()).await.unwrap();
-            raft.broadcast_join(ids.clone()).await.unwrap();
+            raft.broadcast_join(ids.clone()).await.nonfatal().unwrap();
             println!("initialized {}.", raft.id);
             tokio::time::sleep(delay).await;
         }

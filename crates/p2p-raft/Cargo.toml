@@ -18,6 +18,7 @@ nanoid = { workspace = true }
 parking_lot = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
+# thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }

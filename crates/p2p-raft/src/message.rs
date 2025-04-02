@@ -78,8 +78,10 @@ pub enum P2pResponse<C: RaftTypeConfig> {
     P2pError(P2pError),
 }
 
+pub type ForwardToLeader<C> = Option<(<C as RaftTypeConfig>::NodeId, <C as RaftTypeConfig>::Node)>;
+
 impl<C: RaftTypeConfig> P2pResponse<C> {
-    pub fn forward_to_leader(&self) -> Option<Option<(C::NodeId, C::Node)>> {
+    pub fn forward_to_leader(&self) -> Option<ForwardToLeader<C>> {
         match self {
             Self::RaftError(e) => e
                 .forward_to_leader()

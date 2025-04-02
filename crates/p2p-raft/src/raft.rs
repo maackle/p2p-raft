@@ -1,6 +1,11 @@
-use std::{collections::BTreeSet, future::Future, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    future::Future,
+    sync::Arc,
+};
 
-use futures::future;
+use anyhow::anyhow;
+use futures::{stream::FuturesUnordered, StreamExt};
 use itertools::Itertools;
 use maplit::btreemap;
 use openraft::{
@@ -15,6 +20,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     config::Config,
+    error::{P2pRaftError, PResult},
     message::{P2pError, P2pRequest, P2pResponse, RaftRequest, RaftResponse, Request, Response},
     network::P2pNetwork,
     signal::{RaftEvent, SignalSender},
@@ -123,34 +129,56 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         }
     }
 
-    pub async fn broadcast_join(
-        &self,
-        ids: impl IntoIterator<Item = C::NodeId>,
-    ) -> anyhow::Result<()> {
+    pub async fn broadcast_join(&self, ids: impl IntoIterator<Item = C::NodeId>) -> PResult<(), C> {
+        let ids: BTreeSet<C::NodeId> = ids.into_iter().collect();
+
+        // If only self was given, we can't join the cluster
+        if ids.is_empty() {
+            return Err(
+                anyhow::anyhow!("Can't use `broadcast_join` with an empty set of nodes.").into(),
+            );
+        }
+
         let network = self.network.clone();
-
-        let results = future::join_all(
-            ids.into_iter()
-                .filter(|id| *id != self.id)
-                .map(|id| network.send_rpc(id, P2pRequest::Join)),
-        )
-        .await;
-
-        let num_results = results.len();
-
-        let errors = results
+        let mut futs: FuturesUnordered<_> = ids
             .into_iter()
-            .filter_map(|r| match r {
-                Ok(_) => None,
-                Err(e) => Some(e),
-            })
-            .collect_vec();
+            .filter(|id| *id != self.id)
+            .map(|id| network.send_rpc(id, P2pRequest::Join))
+            .collect();
 
-        // Only error if we had no successes at all
-        if errors.is_empty() || errors.len() < num_results {
-            Ok(())
+        // If only self was given, we can't join the cluster
+        if futs.is_empty() {
+            return Err(anyhow::anyhow!("Can't use `broadcast_join` with only self.").into());
+        }
+
+        let mut forwards = BTreeMap::new();
+        let mut errors = Vec::new();
+
+        while let Some(res) = futs.next().await {
+            match res {
+                Ok(res) => {
+                    if res.is_ok() {
+                        // Return early if we successfully reached the leader and joined
+                        return Ok(());
+                    } else {
+                        if let Some(forward) = res.forward_to_leader() {
+                            *forwards.entry(forward).or_insert(0) += 1;
+                        } else {
+                            errors.push(anyhow!("p2p error joining: {res:?}"));
+                        }
+                    }
+                }
+                Err(e) => errors.push(e),
+            }
+        }
+
+        if let Some((forward, _)) = forwards
+            .into_iter()
+            .max_by_key(|(fwd, count)| (*count, fwd.is_some()))
+        {
+            Err(P2pRaftError::NotLeader(forward))
         } else {
-            anyhow::bail!("failed to join any nodes. All errors: {:?}", errors);
+            Err(anyhow::anyhow!("Failed to join any nodes. All errors: {:?}", errors).into())
         }
     }
 

@@ -8,6 +8,7 @@ pub mod network;
 pub mod signal;
 #[cfg(feature = "testing")]
 pub mod testing;
+pub mod error;
 
 use openraft::RaftTypeConfig;
 
@@ -27,12 +28,13 @@ pub trait TypeCfg:
     MemTypeConfig +
     RaftTypeConfig<
     D: std::fmt::Debug + Clone + Eq + Ord + serde::Serialize + serde::de::DeserializeOwned,
-    R = (),
     // R: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
     Vote: Clone + serde::Serialize + serde::de::DeserializeOwned,
     LeaderId: Clone + serde::Serialize + serde::de::DeserializeOwned,
+    Node: Eq + Ord,
     // SnapshotData: std::fmt::Debug + Clone + serde::Serialize + serde::de::DeserializeOwned,
     
+    R = (),
     Entry = openraft::Entry<Self>,
     // Node = (),
     Responder = openraft::impls::OneshotResponder<Self>,
