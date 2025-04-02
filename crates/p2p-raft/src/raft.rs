@@ -10,7 +10,7 @@ use itertools::Itertools;
 use maplit::btreemap;
 use openraft::{
     alias::{LogIdOf, ResponderReceiverOf},
-    error::{ClientWriteError, InitializeError, RaftError},
+    error::{InitializeError, RaftError},
     metrics::WaitError,
     raft::ClientWriteResult,
     ChangeMembers, Entry, EntryPayload, Snapshot,
@@ -20,8 +20,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     config::Config,
-    error::{P2pRaftError, PResult},
-    message::{P2pError, P2pRequest, P2pResponse, RaftRequest, RaftResponse, Request, Response},
+    error::{PError, PResult},
+    message::{P2pRequest, P2pResponse, RaftRequest, RaftResponse, Request, Response},
     network::P2pNetwork,
     signal::{RaftEvent, SignalSender},
     PeerTrackerHandle, TypeCfg,
@@ -176,7 +176,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             .into_iter()
             .max_by_key(|(fwd, count)| (*count, fwd.is_some()))
         {
-            Err(P2pRaftError::NotLeader(forward))
+            Err(PError::NotLeader(forward))
         } else {
             Err(anyhow::anyhow!("Failed to join any nodes. All errors: {:?}", errors).into())
         }
@@ -185,13 +185,13 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
     pub async fn leave(&self) -> anyhow::Result<()> {
         self.send_rpc_to_leader_with_retry(P2pRequest::Leave)
             .await?
-            .to_anyhow()
+            .to_error()
     }
 
     pub async fn propose(&self, data: C::D) -> anyhow::Result<()> {
         self.send_rpc_to_leader_with_retry(P2pRequest::Propose(data))
             .await?
-            .to_anyhow()
+            .to_error()
     }
 
     pub async fn read_log_data(&self, start_index: u64) -> anyhow::Result<Vec<C::D>>
@@ -240,15 +240,12 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             .await?)
     }
 
-    pub async fn write_data(
-        &self,
-        data: C::D,
-    ) -> Result<LogIdOf<C>, RaftError<C, ClientWriteError<C>>> {
+    pub async fn write_data(&self, data: C::D) -> PResult<LogIdOf<C>, C> {
         let r = self.raft.client_write(data.clone()).await?;
         Ok(r.log_id)
     }
 
-    pub async fn write_linearizable<E>(&self, data: C::D) -> anyhow::Result<()>
+    pub async fn write_linearizable<E>(&self, data: C::D) -> PResult<(), C>
     where
         ResponderReceiverOf<C>: Future<Output = Result<ClientWriteResult<C>, E>>,
         E: std::error::Error + openraft::OptionalSend,
@@ -372,11 +369,11 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         let res = match req.clone() {
             P2pRequest::Propose(data) => {
                 if !from_current_voter {
-                    return Ok(P2pResponse::P2pError(P2pError::NotVoter));
+                    return Ok(P2pResponse::Error(PError::NotVoter));
                 }
                 match self.write_data(data).await {
                     Ok(log_id) => P2pResponse::Committed { log_id },
-                    Err(e) => P2pResponse::RaftError(e),
+                    Err(e) => P2pResponse::Error(e.into()),
                 }
             }
             P2pRequest::Join => {
@@ -390,7 +387,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
                     .await
                 {
                     Ok(_) => P2pResponse::Ok,
-                    Err(e) => P2pResponse::RaftError(e),
+                    Err(e) => P2pResponse::Error(PError::Fatal(e.to_string())),
                 }
             }
             P2pRequest::Leave => {
@@ -399,7 +396,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
                     .await
                 {
                     Ok(_) => P2pResponse::Ok,
-                    Err(e) => P2pResponse::RaftError(e),
+                    Err(e) => P2pResponse::Error(PError::Fatal(e.to_string())),
                 }
             }
         };

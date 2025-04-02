@@ -1,11 +1,6 @@
-use openraft::{
-    alias::LogIdOf,
-    error::{ClientWriteError, Infallible, RaftError},
-    raft::*,
-    SnapshotMeta,
-};
+use openraft::{alias::LogIdOf, error::Infallible, raft::*, SnapshotMeta};
 
-use crate::TypeCfg;
+use crate::{error::PError, TypeCfg};
 
 /// An RPC request sent from one node to another.
 #[derive(Debug, derive_more::From, serde::Serialize, serde::Deserialize)]
@@ -71,31 +66,33 @@ pub enum P2pRequest<C: RaftTypeConfig> {
     serialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::Serialize",
     deserialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::de::DeserializeOwned"
 ))]
-pub enum P2pResponse<C: RaftTypeConfig> {
+pub enum P2pResponse<C: TypeCfg> {
     Ok,
     Committed { log_id: LogIdOf<C> },
-    RaftError(RaftError<C, ClientWriteError<C>>),
-    P2pError(P2pError),
+    Error(PError<C, String>),
 }
 
 pub type ForwardToLeader<C> = Option<(<C as RaftTypeConfig>::NodeId, <C as RaftTypeConfig>::Node)>;
 
-impl<C: RaftTypeConfig> P2pResponse<C> {
+pub(crate) fn raft_forward_to_leader<C: RaftTypeConfig>(
+    rf: &openraft::error::ForwardToLeader<C>,
+) -> ForwardToLeader<C> {
+    Some((rf.leader_id.clone()?, rf.leader_node.clone()?))
+}
+
+impl<C: TypeCfg> P2pResponse<C> {
     pub fn forward_to_leader(&self) -> Option<ForwardToLeader<C>> {
         match self {
-            Self::RaftError(e) => e
-                .forward_to_leader()
-                .map(|forward| Some((forward.leader_id.clone()?, forward.leader_node.clone()?))),
+            Self::Error(PError::NotLeader(e)) => Some(e.clone()),
             _ => None,
         }
     }
 
-    pub fn to_anyhow(self) -> anyhow::Result<()> {
+    pub fn to_error(self) -> anyhow::Result<()> {
         match self {
             Self::Ok => Ok(()),
             Self::Committed { .. } => Ok(()),
-            Self::RaftError(e) => Err(e.into()),
-            Self::P2pError(e) => Err(e.into()),
+            Self::Error(e) => Err(anyhow::anyhow!("{e:?}")),
         }
     }
 
@@ -103,24 +100,9 @@ impl<C: RaftTypeConfig> P2pResponse<C> {
         match self {
             P2pResponse::Ok => true,
             P2pResponse::Committed { .. } => true,
-            P2pResponse::RaftError(_) => false,
-            P2pResponse::P2pError(_) => false,
+            P2pResponse::Error(_) => false,
         }
     }
-}
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    serde::Serialize,
-    serde::Deserialize,
-    derive_more::Error,
-    derive_more::Display,
-)]
-pub enum P2pError {
-    NotVoter,
 }
 
 #[derive(Debug, derive_more::From, serde::Serialize, serde::Deserialize)]
