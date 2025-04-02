@@ -1,6 +1,6 @@
-use openraft::{alias::LogIdOf, error::Infallible, raft::*, SnapshotMeta};
+use openraft::{alias::LogIdOf, raft::*, SnapshotMeta};
 
-use crate::{error::PError, TypeCfg};
+use crate::{error::P2pRaftError, TypeCfg};
 
 /// An RPC request sent from one node to another.
 #[derive(Debug, derive_more::From, serde::Serialize, serde::Deserialize)]
@@ -69,7 +69,7 @@ pub enum P2pRequest<C: RaftTypeConfig> {
 pub enum P2pResponse<C: TypeCfg> {
     Ok,
     Committed { log_id: LogIdOf<C> },
-    Error(PError<C, String>),
+    Error(P2pRaftError<C, String>),
 }
 
 pub type ForwardToLeader<C> = Option<(<C as RaftTypeConfig>::NodeId, <C as RaftTypeConfig>::Node)>;
@@ -83,7 +83,7 @@ pub(crate) fn raft_forward_to_leader<C: RaftTypeConfig>(
 impl<C: TypeCfg> P2pResponse<C> {
     pub fn forward_to_leader(&self) -> Option<ForwardToLeader<C>> {
         match self {
-            Self::Error(PError::NotLeader(e)) => Some(e.clone()),
+            Self::Error(P2pRaftError::NotLeader(e)) => Some(e.clone()),
             _ => None,
         }
     }
@@ -147,9 +147,6 @@ pub enum RaftResponse<C: RaftTypeConfig> {
     Append(AppendEntriesResponse<C>),
     Snapshot(SnapshotResponse<C>),
     Vote(VoteResponse<C>),
-
-    // XXX: hmm
-    Error(Infallible),
 }
 
 impl<C: TypeCfg> RaftResponse<C> {
@@ -158,7 +155,6 @@ impl<C: TypeCfg> RaftResponse<C> {
             Self::Append(r) => r.is_success(),
             Self::Snapshot(_) => true,
             Self::Vote(r) => r.vote_granted,
-            Self::Error(_) => false,
         }
     }
 }

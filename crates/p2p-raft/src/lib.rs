@@ -8,7 +8,7 @@ pub mod network;
 pub mod signal;
 #[cfg(feature = "testing")]
 pub mod testing;
-pub mod error;
+mod error;
 
 use openraft::RaftTypeConfig;
 
@@ -16,6 +16,7 @@ pub use config::Config;
 use p2p_raft_memstore::MemTypeConfig;
 pub use peer_tracker::{PeerTracker, PeerTrackerHandle};
 pub use raft::{LogOp, P2pRaft};
+pub use error::{P2pRaftError as Error, *};
 
 #[cfg(feature = "memstore")]
 pub mod mem;

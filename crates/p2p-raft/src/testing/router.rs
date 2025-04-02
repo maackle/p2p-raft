@@ -10,7 +10,7 @@ use super::TypeConfig;
 use parking_lot::Mutex;
 
 use crate::config::Config;
-use crate::error::PResultExt;
+use crate::error::P2pRaftResultExt;
 use crate::message::Request;
 use crate::message::Response;
 use crate::signal::SignalSender;
