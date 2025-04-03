@@ -197,19 +197,19 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             .to_error()
     }
 
-    pub async fn read_log_data(&self, start_index: u64) -> anyhow::Result<Vec<C::D>>
+    pub async fn read_log_data_without_indexes(&self, start_index: u64) -> anyhow::Result<Vec<C::D>>
     where
         C: TypeCfg<Entry = Entry<C>>,
     {
         Ok(self
-            .read_log_ops(start_index)
+            .read_log_data(start_index)
             .await?
             .into_iter()
             .map(|i| i.op)
             .collect_vec())
     }
 
-    pub async fn read_log_ops(&self, start_index: u64) -> anyhow::Result<Vec<LogOp<C>>>
+    pub async fn read_log_data(&self, start_index: u64) -> anyhow::Result<Vec<LogOp<C>>>
     where
         C: TypeCfg<Entry = Entry<C>>,
     {
@@ -540,7 +540,7 @@ where
             .unwrap();
 
         if verbose {
-            let log = self.read_log_ops(0).await;
+            let log = self.read_log_data(0).await;
             let snapshot = self.raft.get_snapshot().await.unwrap().map(|s| s.snapshot);
 
             [

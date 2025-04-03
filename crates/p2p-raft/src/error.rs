@@ -8,7 +8,7 @@ use crate::message::ForwardToLeader;
     PartialEq,
     Eq,
     derive_more::Display,
-    derive_more::Error,
+    // derive_more::Error,
     serde::Serialize,
     serde::Deserialize,
 )]
@@ -29,6 +29,16 @@ pub enum P2pRaftError<C: RaftTypeConfig, F = anyhow::Error> {
 impl<C: RaftTypeConfig> From<anyhow::Error> for P2pRaftError<C, anyhow::Error> {
     fn from(e: anyhow::Error) -> Self {
         Self::Fatal(e)
+    }
+}
+
+impl<C: RaftTypeConfig, F: Into<anyhow::Error>> From<P2pRaftError<C, F>> for anyhow::Error {
+    fn from(e: P2pRaftError<C, F>) -> Self {
+        match e {
+            P2pRaftError::Rejected => anyhow::anyhow!("rejected"),
+            P2pRaftError::NotLeader(fwd) => anyhow::anyhow!("not leader: {fwd:?}"),
+            P2pRaftError::Fatal(e) => e.into(),
+        }
     }
 }
 

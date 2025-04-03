@@ -40,7 +40,6 @@ where
     /// XXX: really this is just a workaround for when it's not feasible to implement
     ///      merging in the state machine, when that logic needs to be in the front end
     ///      and the merged snapshot is forced by the leader.
-    #[deprecated = "this does not work!"]
     pub async fn replace_snapshot(&self, data: C::SnapshotData) {
         use openraft::storage::RaftStateMachine;
 
@@ -77,6 +76,11 @@ where
             // snapshot_id: nanoid::nanoid!(),
         };
 
+        dbg!(self.read_log_entries(0).await.unwrap());
+
+        let trigger = self.raft.trigger();
+        trigger.snapshot().await.unwrap();
+
         self.with_state_machine(move |s: &mut ArcStateMachineStore<C>| {
             async move {
                 s.clone()
@@ -91,13 +95,17 @@ where
         .unwrap()
         .unwrap();
 
-        let trigger = self.raft.trigger();
+        let purge_index = smd.last_applied.as_ref().map(|l| l.index);
         trigger
-            .purge_log(smd.last_applied.map(|l| l.index).unwrap_or_default())
+            .purge_log(purge_index.unwrap_or_default())
             .await
             .unwrap();
-        trigger.snapshot().await.unwrap();
-        trigger.heartbeat().await.unwrap();
+
+        self.raft
+            .wait(None)
+            .purged(smd.last_applied.clone(), "purge log")
+            .await
+            .unwrap();
 
         // raft.install_full_snapshot(Vote::new(term, raft.id), snapshot)
         //     .await
