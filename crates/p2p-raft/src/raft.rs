@@ -129,6 +129,17 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
         }
     }
 
+    /// Sends a join request to all provided nodes.
+    ///
+    /// `self.id` will be removed if present.
+    ///
+    /// The return value is as follows:
+    ///
+    /// - if the leader was reached and joining was successful, the result is `Ok`
+    /// - otherwise, each node will return who it believes to be the leader, and the "most popular"
+    ///     answer will be returned as [`P2pRaftError::NotLeader`].
+    /// - if "self" is the most popular answer, then the result is `Ok`.
+    /// - if all responses are errors, the list of errors will be returned as a string
     pub async fn broadcast_join(
         &self,
         ids: impl IntoIterator<Item = C::NodeId>,
@@ -175,13 +186,31 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             }
         }
 
+        // let self_key = Some((self.id.clone(), (self.nodemap)(self.id.clone())));
+        // let self_forwards = forwards.remove(&self_key);
+        // dbg!(&forwards);
+
         if let Some((forward, _)) = forwards
             .into_iter()
             .max_by_key(|(fwd, count)| (*count, fwd.is_some()))
         {
-            Err(P2pRaftError::NotLeader(forward))
+            if forward
+                .as_ref()
+                .filter(|(node, _)| *node == self.id)
+                .is_some()
+            {
+                // If most nodes think we are the leader, we're done.
+                return Ok(());
+            } else {
+                Err(P2pRaftError::NotLeader(forward))
+            }
         } else {
-            Err(anyhow::anyhow!("Failed to join any nodes. All errors: {:?}", errors).into())
+            Err(anyhow::anyhow!(
+                "Failed to join any nodes. {} errors follow:\n   {}",
+                errors.len(),
+                errors.iter().map(|e| e.to_string()).join("\n   ")
+            )
+            .into())
         }
     }
 
@@ -390,7 +419,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
                     .await
                 {
                     Ok(_) => P2pResponse::Ok,
-                    Err(e) => P2pResponse::Error(P2pRaftError::Fatal(e.to_string())),
+                    Err(e) => P2pResponse::Error(P2pRaftError::<C>::from(e).into()),
                 }
             }
             P2pRequest::Leave => {
@@ -399,7 +428,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
                     .await
                 {
                     Ok(_) => P2pResponse::Ok,
-                    Err(e) => P2pResponse::Error(P2pRaftError::Fatal(e.to_string())),
+                    Err(e) => P2pResponse::Error(P2pRaftError::<C>::from(e).into()),
                 }
             }
         };

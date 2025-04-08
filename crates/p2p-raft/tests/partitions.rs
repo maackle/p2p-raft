@@ -38,6 +38,12 @@ async fn join_later() {
     noob.broadcast_join(0..=NUM_PEERS).await.unwrap();
     await_partition_stability(&rafts[..]).await;
     await_any_leader(&rafts[..]).await;
+
+    // Joining is idempotent for everyone including the leader
+    for raft in rafts.iter() {
+        raft.broadcast_join(0..=NUM_PEERS).await.unwrap();
+    }
+    noob.broadcast_join(0..=NUM_PEERS).await.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
