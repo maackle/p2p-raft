@@ -3,12 +3,14 @@ use p2p_raft::{testing::*, Config};
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "waiting on resolution of https://github.com/databendlabs/openraft/issues/1333#issuecomment-2705359074"]
 async fn test_snapshot() -> anyhow::Result<()> {
+    setup_tracing("openraft=info");
+
     const NUM_PEERS: u64 = 5;
     let mut router = Router::new(Config::default(), None);
     let rafts = router.add_nodes(0..NUM_PEERS).await;
     router.initialize_nodes().await;
 
-    spawn_info_loop(rafts.clone(), 1000, true);
+    // spawn_info_loop(rafts.clone(), 1000, true);
 
     let l = await_any_leader(&rafts).await as usize;
     let leader = &rafts[l];

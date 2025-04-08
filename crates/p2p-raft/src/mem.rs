@@ -76,8 +76,6 @@ where
             // snapshot_id: nanoid::nanoid!(),
         };
 
-        dbg!(self.read_log_entries(0).await.unwrap());
-
         let trigger = self.raft.trigger();
         trigger.snapshot().await.unwrap();
 
