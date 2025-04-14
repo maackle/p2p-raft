@@ -22,10 +22,20 @@ pub struct LogStore<C: MemTypeConfig> {
     inner: Arc<Mutex<LogStoreInner<C>>>,
 }
 
+impl<C: MemTypeConfig> LogStore<C> {
+    pub async fn last_normal_entry_log_id(&self) -> Option<LogIdOf<C>> {
+        self.inner.lock().await.last_normal_entry_log_id.clone()
+    }
+}
+
 #[derive(Debug)]
 pub struct LogStoreInner<C: MemTypeConfig> {
     /// The last purged log id.
     last_purged_log_id: Option<LogIdOf<C>>,
+
+    /// The log id of the last normal entry.
+    /// Used to construct chains of entries for the application.
+    last_normal_entry_log_id: Option<LogIdOf<C>>,
 
     /// The Raft log.
     log: BTreeMap<u64, C::Entry>,
@@ -41,6 +51,7 @@ impl<C: MemTypeConfig> Default for LogStoreInner<C> {
     fn default() -> Self {
         Self {
             last_purged_log_id: None,
+            last_normal_entry_log_id: None,
             log: BTreeMap::new(),
             committed: None,
             vote: None,
@@ -107,7 +118,21 @@ impl<C: MemTypeConfig> LogStoreInner<C> {
     {
         // Simple implementation that calls the flush-before-return `append_to_log`.
         for entry in entries {
-            self.log.insert(entry.index(), entry);
+            match entry.payload {
+                openraft::EntryPayload::Normal(_) => {
+                    // Update the last normal entry log id
+                    self.last_normal_entry_log_id = Some(entry.log_id());
+                }
+                _ => {}
+            }
+            let log_id = entry.log_id();
+            if let Some(existing_entry) = self.log.insert(entry.index(), entry) {
+                tracing::error!(
+                    ?existing_entry,
+                    new_log_id = ?log_id,
+                    "Log forked! Tried to insert entry into raft log at same index as existing entry"
+                )
+            }
         }
         callback.io_completed(Ok(()));
 

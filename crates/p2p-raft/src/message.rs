@@ -68,8 +68,18 @@ pub enum P2pRequest<C: RaftTypeConfig> {
 ))]
 pub enum P2pResponse<C: TypeCfg> {
     Ok,
-    Committed { log_id: LogIdOf<C> },
+    Committed(Committed<C>),
     Error(P2pRaftError<C, String>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(bound(
+    serialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::Serialize",
+    deserialize = "<C as openraft::RaftTypeConfig>::SnapshotData: serde::de::DeserializeOwned"
+))]
+pub struct Committed<C: TypeCfg> {
+    pub log_id: LogIdOf<C>,
+    pub prev_op_log_id: Option<LogIdOf<C>>,
 }
 
 pub type ForwardToLeader<C> = Option<(<C as RaftTypeConfig>::NodeId, <C as RaftTypeConfig>::Node)>;

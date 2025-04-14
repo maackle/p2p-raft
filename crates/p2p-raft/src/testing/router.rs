@@ -15,7 +15,7 @@ use crate::message::Request;
 use crate::message::Response;
 use crate::signal::SignalSender;
 
-type P2pRaft = crate::P2pRaft<TypeConfig, RouterNode>;
+pub type TestRaft = crate::P2pRaft<TypeConfig, RouterNode>;
 
 /// Simulate a network router.
 #[derive(Clone)]
@@ -41,7 +41,7 @@ impl Router {
         }
     }
 
-    pub fn rafts(&self) -> Vec<P2pRaft> {
+    pub fn rafts(&self) -> Vec<TestRaft> {
         self.lock().targets.values().cloned().collect()
     }
 
@@ -85,7 +85,7 @@ impl Router {
 }
 
 impl Router {
-    pub async fn add_nodes(&mut self, nodes: impl IntoIterator<Item = u64>) -> Vec<P2pRaft> {
+    pub async fn add_nodes(&mut self, nodes: impl IntoIterator<Item = u64>) -> Vec<TestRaft> {
         let mut rafts = Vec::new();
 
         for node in nodes {
@@ -101,13 +101,13 @@ impl Router {
         node_id: NodeId,
         config: impl Into<Arc<Config>>,
         signal_tx: Option<SignalSender<TypeConfig>>,
-    ) -> P2pRaft {
+    ) -> TestRaft {
         let node = RouterNode {
             source: node_id,
             router: self.clone(),
         };
 
-        let raft = P2pRaft::spawn_memory(node_id, config, node, signal_tx, |_| ())
+        let raft = TestRaft::spawn_memory(node_id, config, node, signal_tx, |_| ())
             .await
             .unwrap();
 
@@ -119,7 +119,7 @@ impl Router {
 
 #[derive(Clone, Default)]
 pub struct RouterConnections {
-    pub targets: BTreeMap<NodeId, P2pRaft>,
+    pub targets: BTreeMap<NodeId, TestRaft>,
     pub latency: HashMap<(NodeId, NodeId), u64>,
     pub partitions: BTreeMap<NodeId, PartitionId>,
 }

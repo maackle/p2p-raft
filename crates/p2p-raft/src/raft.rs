@@ -21,7 +21,7 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     config::Config,
     error::{P2pRaftError, P2pRaftResult},
-    message::{P2pRequest, P2pResponse, RaftRequest, RaftResponse, Request, Response},
+    message::{Committed, P2pRequest, P2pResponse, RaftRequest, RaftResponse, Request, Response},
     network::P2pNetwork,
     signal::{RaftEvent, SignalSender},
     PeerTrackerHandle, TypeCfg,
@@ -131,7 +131,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
 
     /// Sends a join request to all provided nodes.
     ///
-    /// `self.id` will be removed if present.
+    /// `self.id` will be removed from the list of nodes if present.
     ///
     /// The return value is as follows:
     ///
@@ -226,9 +226,12 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             .to_error()
     }
 
-    pub async fn read_log_data_without_indexes(&self, start_index: u64) -> anyhow::Result<Vec<C::D>>
-    where
-        C: TypeCfg<Entry = Entry<C>>,
+    pub async fn read_log_data_without_indexes(
+        &self,
+        start_index: u64,
+    ) -> anyhow::Result<Vec<C::D>>
+// where
+    //     C: TypeCfg<Entry = Entry<C>>,
     {
         Ok(self
             .read_log_data(start_index)
@@ -239,8 +242,8 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
     }
 
     pub async fn read_log_data(&self, start_index: u64) -> anyhow::Result<Vec<LogOp<C>>>
-    where
-        C: TypeCfg<Entry = Entry<C>>,
+// where
+    //     C: TypeCfg<Entry = Entry<C>>,
     {
         Ok(self
             .read_log_entries(start_index)
@@ -257,8 +260,8 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
     }
 
     pub async fn read_log_entries(&self, start_index: u64) -> anyhow::Result<Vec<C::Entry>>
-    where
-        C: TypeCfg<Entry = Entry<C>>,
+// where
+    //     C: TypeCfg<Entry = Entry<C>>,
     {
         use openraft::storage::RaftLogStorage;
         use openraft::RaftLogReader;
@@ -272,19 +275,26 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
             .await?)
     }
 
-    pub async fn write_data(&self, data: C::D) -> P2pRaftResult<LogIdOf<C>, C> {
+    pub async fn write_data(&self, data: C::D) -> P2pRaftResult<Committed<C>, C> {
+        use openraft::storage::RaftLogStorage;
+
+        let store = self.store.clone().get_log_reader().await;
+        let last_normal_log_id = store.last_normal_entry_log_id().await;
+
         let r = self.raft.client_write(data.clone()).await?;
-        Ok(r.log_id)
+        Ok(Committed {
+            log_id: r.log_id,
+            prev_op_log_id: last_normal_log_id,
+        })
     }
 
-    pub async fn write_linearizable<E>(&self, data: C::D) -> P2pRaftResult<(), C>
+    pub async fn write_linearizable<E>(&self, data: C::D) -> P2pRaftResult<Committed<C>, C>
     where
         ResponderReceiverOf<C>: Future<Output = Result<ClientWriteResult<C>, E>>,
         E: std::error::Error + openraft::OptionalSend,
     {
         self.ensure_linearizable().await?;
-        self.write_data(data).await?;
-        Ok(())
+        self.write_data(data).await
     }
 
     pub async fn send_rpc_to_leader_with_retry(
@@ -404,7 +414,7 @@ impl<C: TypeCfg, N: P2pNetwork<C>> P2pRaft<C, N> {
                     return Ok(P2pResponse::Error(P2pRaftError::Rejected));
                 }
                 match self.write_data(data).await {
-                    Ok(log_id) => P2pResponse::Committed { log_id },
+                    Ok(committed) => P2pResponse::Committed(committed),
                     Err(e) => P2pResponse::Error(e.into()),
                 }
             }
