@@ -5,9 +5,7 @@ use p2p_raft::{testing::*, Config};
 #[tokio::test(flavor = "multi_thread")]
 async fn natural_startup() {
     let num_peers = 5;
-    let mut config = Config::default();
-    config.join_interval = Duration::from_millis(100);
-    config.responsive_interval = Duration::from_millis(500);
+    let config = Config::testing(50);
 
     let mut router = Router::new(config, None);
     let rafts = router.add_nodes(0..num_peers).await;
@@ -19,6 +17,41 @@ async fn natural_startup() {
     println!("router created.");
 
     await_partition_stability(&rafts).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn startup_race() {
+    let num_peers = 3;
+    let config = Config::testing(50);
+
+    let mut router = Router::new(config, None);
+    let rafts = router.add_nodes(0..num_peers).await;
+
+    // spawn_info_loop(rafts.clone(), 100, true);
+
+    let ids = rafts.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
+    for raft in rafts.iter() {
+        raft.initialize([raft.id]).await.unwrap();
+        raft.write_linearizable(raft.id + 10).await.unwrap();
+    }
+
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    for raft in rafts.iter() {
+        raft.broadcast_join(ids.clone()).await.unwrap();
+    }
+
+    await_partition_stability(&rafts).await;
+    let leader = await_any_leader(&rafts).await;
+
+    rafts[leader as usize]
+        .write_linearizable(100)
+        .await
+        .unwrap();
+
+    for r in rafts.iter() {
+        println!("{}", r.debug_line(true).await);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]

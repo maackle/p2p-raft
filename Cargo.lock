@@ -686,7 +686,7 @@ checksum = "c2806eaa3524762875e21c3dcd057bc4b7bfa01ce4da8d46be1cd43649e1cc6b"
 [[package]]
 name = "openraft"
 version = "0.10.0"
-source = "git+https://github.com/databendlabs/openraft#ef090e1bef84b5ab65ff3851cb7266d42506c637"
+source = "git+https://github.com/maackle/openraft?branch=forking#bfb27ecb370f30f0ea530b99b96254f7a04a8f13"
 dependencies = [
  "anyerror",
  "byte-unit",
@@ -708,7 +708,7 @@ dependencies = [
 [[package]]
 name = "openraft-macros"
 version = "0.10.0"
-source = "git+https://github.com/databendlabs/openraft#ef090e1bef84b5ab65ff3851cb7266d42506c637"
+source = "git+https://github.com/maackle/openraft?branch=forking#bfb27ecb370f30f0ea530b99b96254f7a04a8f13"
 dependencies = [
  "chrono",
  "proc-macro2",
@@ -720,7 +720,7 @@ dependencies = [
 [[package]]
 name = "openraft-memstore"
 version = "0.10.0"
-source = "git+https://github.com/databendlabs/openraft#ef090e1bef84b5ab65ff3851cb7266d42506c637"
+source = "git+https://github.com/maackle/openraft?branch=forking#bfb27ecb370f30f0ea530b99b96254f7a04a8f13"
 dependencies = [
  "openraft",
  "serde",

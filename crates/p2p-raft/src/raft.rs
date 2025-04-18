@@ -579,7 +579,7 @@ where
             .unwrap();
 
         if verbose {
-            let log = self.read_log_data(0).await;
+            let log = self.read_log_entries(0).await;
             let snapshot = self.raft.get_snapshot().await.unwrap().map(|s| s.snapshot);
 
             [
@@ -589,7 +589,7 @@ where
                 format!("members {:?}", members),
                 format!("sees {:?}", peers),
                 format!("snapshot {:?}", snapshot),
-                format!("log {:?}", log),
+                format!("log {:#?}", log),
             ]
             .into_iter()
             .join(" ")
